@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { v4 as uuidv4 } from "uuid";
 
 export type BudgetItem = {
   id: string;
@@ -9,10 +10,13 @@ export type BudgetItem = {
 
 export type BudgetData = {
   clientName: string;
+  clientId: string | null;
   address: string;
   date: string; // ISO
+  rawScope: string;
   items: BudgetItem[];
-  manualTotal: number | null;
+  surcharge: number;
+  discount: number;
   materialIncluded: boolean;
   paymentTerms: string;
   executionTerms: string;
@@ -22,14 +26,23 @@ export type BudgetData = {
 
 const KEY = "budget:data";
 const BG_KEY = "budget:bg";
-const AUTH_KEY = "budget:auth";
+
+export const newItem = (): BudgetItem => ({
+  id: uuidv4(),
+  description: "",
+  quantity: null,
+  unitPrice: null,
+});
 
 export const defaultBudget = (): BudgetData => ({
   clientName: "",
+  clientId: null,
   address: "",
   date: new Date().toISOString(),
-  items: [{ id: crypto.randomUUID(), description: "", quantity: null, unitPrice: null }],
-  manualTotal: null,
+  rawScope: "",
+  items: [newItem()],
+  surcharge: 0,
+  discount: 0,
   materialIncluded: false,
   paymentTerms: "50% no início, 50% na entrega",
   executionTerms: "A combinar",
@@ -64,11 +77,14 @@ export function useBackground() {
   return [bg, setBg] as const;
 }
 
-export const auth = {
-  isLoggedIn: () => typeof window !== "undefined" && localStorage.getItem(AUTH_KEY) === "1",
-  login: () => localStorage.setItem(AUTH_KEY, "1"),
-  logout: () => localStorage.removeItem(AUTH_KEY),
-};
-
 export const formatBRL = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+export function computeTotals(d: BudgetData) {
+  const subtotal = d.items.reduce(
+    (s, i) => s + (i.quantity ?? 0) * (i.unitPrice ?? 0),
+    0,
+  );
+  const total = subtotal + (d.surcharge || 0) - (d.discount || 0);
+  return { subtotal, total };
+}
