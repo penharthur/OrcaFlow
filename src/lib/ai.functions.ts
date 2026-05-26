@@ -11,16 +11,17 @@ export async function structureScope(scope: string): Promise<{ items: Structured
   if (!apiKey) throw new Error("VITE_GEMINI_API_KEY não configurada.");
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-  const prompt = `Você é assistente de um profissional de serviços gerais e pintura no Brasil.
-Analise o texto bruto de escopo abaixo e retorne ESTRITAMENTE um JSON (sem blocos markdown, sem texto extra) com a chave "items".
-Cada item deve ter:
-- "descricao": string — descrição clara em português
-- "quantidade": number ou null — só preencha se explícito no texto
-- "valor": number ou null — valor unitário em reais com ponto decimal, só se explícito
+  const prompt = `Você é um assistente especialista em orçamentos de serviços gerais e obras no Brasil.
+Analise o texto bruto de escopo abaixo e retorne ESTRITAMENTE um JSON válido (sem marcações markdown, sem \`\`\`json, sem texto extra) com um objeto contendo a chave "items".
 
-Texto:
+Regras obrigatórias para cada item extraído:
+- "descricao": string — descrição clara e profissional do serviço em português.
+- "quantidade": number ou null — identifique a quantidade exata. Se o texto usar palavras como "ambas", "as duas" ou "par", converta a quantidade para o número 2.
+- "valor": number ou null — ATENÇÃO: Este campo DEVE SER SEMPRE O VALOR UNITÁRIO do serviço. Se o texto informar um valor TOTAL para uma quantidade maior que 1 (ex: "400 reais ambas as portas"), você DEVE DIVIDIR o total pela quantidade e retornar APENAS o valor matemático unitário (ex: 200). Use apenas números com ponto para decimais, sem a sigla R$.
+
+Texto bruto do escopo:
 ${scope}`;
 
   const result = await model.generateContent(prompt);

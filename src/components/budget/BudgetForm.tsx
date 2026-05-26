@@ -95,8 +95,20 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
         items: items.map((it) => ({ ...newItem(), ...it })),
       }));
       toast.success(`${items.length} itens estruturados pela IA.`);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Falha ao estruturar com IA");
+    } catch (e: any) {
+      // Aqui pegamos o erro 503 e traduzimos para o usuário
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      if (
+        errorMessage.includes("503") ||
+        errorMessage.includes("high demand") ||
+        errorMessage.toLowerCase().includes("overloaded")
+      ) {
+        toast.error(
+          "A inteligência artificial está muito requisitada agora. Tente novamente em 5 segundinhos!",
+        );
+      } else {
+        toast.error("Falha ao estruturar com IA: Verifique o escopo e tente novamente.");
+      }
     } finally {
       setAiLoading(false);
     }
@@ -206,11 +218,16 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
         />
         <Button onClick={runAI} disabled={aiLoading} className="w-full">
           {aiLoading ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Lendo escopo...
+            </>
           ) : (
-            <Sparkles className="h-4 w-4 mr-2" />
+            <>
+              <Sparkles className="h-4 w-4 mr-2" />
+              Estruturar Orçamento (IA)
+            </>
           )}
-          Estruturar Orçamento (IA)
         </Button>
       </section>
 
