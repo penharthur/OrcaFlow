@@ -7,10 +7,10 @@ import { computeTotals, formatBRL, type BudgetData } from "@/lib/budget-store";
 type Props = { data: BudgetData; background: string | null };
 
 export const BudgetPreview = forwardRef<HTMLDivElement, Props>(({ data, background }, ref) => {
-  const { subtotal, total } = computeTotals(data);
+  const { subtotal, total, isGlobal } = computeTotals(data);
   const anyItemHasValues = data.items.some((i) => i.quantity != null && i.unitPrice != null);
-  const showTable = anyItemHasValues;
-  const showTotal = total !== 0 || subtotal !== 0;
+  const showTable = anyItemHasValues && !isGlobal;
+  const showTotal = total !== 0 || subtotal !== 0 || isGlobal;
 
   return (
     <div ref={ref} className="a4-sheet relative overflow-hidden">
@@ -113,6 +113,7 @@ export const BudgetPreview = forwardRef<HTMLDivElement, Props>(({ data, backgrou
 
             {showTotal && (
               <div className="mt-6 ml-auto w-fit text-xs space-y-1">
+                {/* Subtotal por item só aparece quando há preços individuais e sem valor global */}
                 {showTable && (
                   <div className="flex justify-between gap-8">
                     <span className="text-slate-700">Subtotal</span>

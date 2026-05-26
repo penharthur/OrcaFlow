@@ -6,7 +6,9 @@ export type StructuredItem = {
   unitPrice: number | null;
 };
 
-export async function structureScope(scope: string): Promise<{ items: StructuredItem[] }> {
+export async function structureScope(
+  scope: string,
+): Promise<{ items: StructuredItem[]; valor_global: number | null }> {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
   if (!apiKey) throw new Error("VITE_GEMINI_API_KEY não configurada.");
 
@@ -14,12 +16,17 @@ export async function structureScope(scope: string): Promise<{ items: Structured
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const prompt = `Você é um assistente especialista em orçamentos de serviços gerais e obras no Brasil.
-Analise o texto bruto de escopo abaixo e retorne ESTRITAMENTE um JSON válido (sem marcações markdown, sem \`\`\`json, sem texto extra) com um objeto contendo a chave "items".
+Analise o texto bruto de escopo abaixo e retorne ESTRITAMENTE um JSON válido (sem marcações markdown, sem \`\`\`json, sem texto extra) com um objeto contendo as chaves "items" e "valor_global".
 
-Regras obrigatórias para cada item extraído:
+Regras obrigatórias para cada item em "items":
 - "descricao": string — descrição clara e profissional do serviço em português.
-- "quantidade": number ou null — identifique a quantidade exata. Se o texto usar palavras como "ambas", "as duas" ou "par", converta a quantidade para o número 2.
-- "valor": number ou null — ATENÇÃO: Este campo DEVE SER SEMPRE O VALOR UNITÁRIO do serviço. Se o texto informar um valor TOTAL para uma quantidade maior que 1 (ex: "400 reais ambas as portas"), você DEVE DIVIDIR o total pela quantidade e retornar APENAS o valor matemático unitário (ex: 200). Use apenas números com ponto para decimais, sem a sigla R$.
+- "quantidade": number ou null — identifique a quantidade exata. Se o texto usar palavras como "ambas", "as duas" ou "par", converta para 2.
+- "valor": number ou null — SEMPRE o valor UNITÁRIO. Se o texto informar valor total para quantidade > 1, DIVIDA pelo total de unidades. Use ponto como decimal, sem "R$".
+
+Regra para "valor_global":
+- Se o texto mencionar um valor único para TODOS os serviços juntos (ex: "tudo por 650", "valor total 800", "cobro 500 pelo serviço todo"), coloque esse valor em "valor_global" e deixe "valor" de cada item como null.
+- Se os valores forem por item individual, deixe "valor_global" como null e preencha "valor" em cada item.
+- "valor_global" é number ou null.
 
 Texto bruto do escopo:
 ${scope}`;
@@ -62,5 +69,10 @@ ${scope}`;
     };
   });
 
-  return { items };
+  const valor_global =
+    typeof (parsed as Record<string, unknown>)?.valor_global === "number"
+      ? ((parsed as Record<string, unknown>).valor_global as number)
+      : null;
+
+  return { items, valor_global };
 }

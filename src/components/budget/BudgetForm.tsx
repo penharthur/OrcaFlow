@@ -105,7 +105,7 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
     }
     setAiLoading(true);
     try {
-      const { items } = await structureScope(data.rawScope);
+      const { items, valor_global } = await structureScope(data.rawScope);
       if (!items.length) {
         toast.warning("A IA não retornou itens. Refine o texto e tente novamente.");
         return;
@@ -113,8 +113,10 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
       setData((d) => ({
         ...d,
         items: items.map((it) => ({ ...newItem(), ...it })),
+        globalValue: valor_global ?? 0,
       }));
-      toast.success(`${items.length} itens estruturados pela IA.`);
+      const globalMsg = valor_global ? ` • Valor global: R$ ${valor_global.toFixed(2).replace(".", ",")}` : "";
+      toast.success(`${items.length} itens estruturados pela IA.${globalMsg}`);
     } catch (e: any) {
       // Aqui pegamos o erro 503 e traduzimos para o usuário
       const errorMessage = e instanceof Error ? e.message : String(e);
@@ -272,24 +274,40 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
           </SortableContext>
         </DndContext>
 
-        <div className="grid grid-cols-2 gap-3 pt-2 border-t">
+        <div className="pt-2 border-t space-y-3">
+          {/* Valor global — substitui o cálculo por item */}
           <div className="space-y-1">
-            <Label className="text-xs">Acréscimo (R$)</Label>
+            <Label className="text-xs font-semibold">Valor global do serviço (R$)</Label>
             <Input
               inputMode="decimal"
-              value={data.surcharge || ""}
+              value={data.globalValue || ""}
               placeholder="0,00"
-              onChange={(e) => setData((d) => ({ ...d, surcharge: parseNum(e.target.value) }))}
+              onChange={(e) => setData((d) => ({ ...d, globalValue: parseNum(e.target.value) }))}
             />
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              Quando preenchido, aparece direto no total — ideal para orçamentos sem preço por item.
+            </p>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Desconto (R$)</Label>
-            <Input
-              inputMode="decimal"
-              value={data.discount || ""}
-              placeholder="0,00"
-              onChange={(e) => setData((d) => ({ ...d, discount: parseNum(e.target.value) }))}
-            />
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Acréscimo (R$)</Label>
+              <Input
+                inputMode="decimal"
+                value={data.surcharge || ""}
+                placeholder="0,00"
+                onChange={(e) => setData((d) => ({ ...d, surcharge: parseNum(e.target.value) }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Desconto (R$)</Label>
+              <Input
+                inputMode="decimal"
+                value={data.discount || ""}
+                placeholder="0,00"
+                onChange={(e) => setData((d) => ({ ...d, discount: parseNum(e.target.value) }))}
+              />
+            </div>
           </div>
         </div>
       </section>

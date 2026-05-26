@@ -23,6 +23,8 @@ export type BudgetData = {
   professionalName: string;
   contactEmail: string;
   contactPhone: string;
+  /** Valor global do serviço. Quando > 0, substitui o cálculo por item no total. */
+  globalValue: number;
 };
 
 const KEY = "budget:data";
@@ -50,6 +52,7 @@ export const defaultBudget = (): BudgetData => ({
   professionalName: "",
   contactEmail: "",
   contactPhone: "",
+  globalValue: 0,
 });
 
 export function useBudget() {
@@ -84,6 +87,8 @@ export const formatBRL = (n: number) =>
 
 export function computeTotals(d: BudgetData) {
   const subtotal = d.items.reduce((s, i) => s + (i.quantity ?? 0) * (i.unitPrice ?? 0), 0);
-  const total = subtotal + (d.surcharge || 0) - (d.discount || 0);
-  return { subtotal, total };
+  const isGlobal = (d.globalValue ?? 0) > 0;
+  const base = isGlobal ? (d.globalValue ?? 0) : subtotal;
+  const total = base + (d.surcharge || 0) - (d.discount || 0);
+  return { subtotal, total, isGlobal, base };
 }
