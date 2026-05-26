@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarIcon, Plus, Sparkles, Upload, X, Loader2 } from "lucide-react";
@@ -48,7 +49,15 @@ const headerLabel = "text-[11px] uppercase tracking-wider font-semibold text-sla
 
 export function BudgetForm({ data, setData, background, setBackground }: Props) {
   const [aiLoading, setAiLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0);
 
+  const loadingPhrases = [
+    "Analisando o texto bruto...",
+    "Identificando serviços e metragens...",
+    "Calculando quantidades e valores...",
+    "Aplicando mudanças na tabela...",
+    "Finalizando formatação...",
+  ];
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -77,6 +86,17 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
       return { ...d, items: arrayMove(d.items, oldIndex, newIndex) };
     });
   };
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (aiLoading) {
+      setLoadingStep(0);
+      interval = setInterval(() => {
+        setLoadingStep((prev) => (prev < loadingPhrases.length - 1 ? prev + 1 : prev));
+      }, 1200);
+    }
+    return () => clearInterval(interval);
+  }, [aiLoading]);
 
   const runAI = async () => {
     if (!data.rawScope.trim()) {
@@ -216,18 +236,9 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
           }
           className="min-h-[140px] font-mono text-sm leading-relaxed"
         />
-        <Button onClick={runAI} disabled={aiLoading} className="w-full">
-          {aiLoading ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Lendo escopo...
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-4 w-4 mr-2" />
-              Estruturar Orçamento (IA)
-            </>
-          )}
+        <Button onClick={runAI} disabled={aiLoading} className="w-full mt-4">
+          <Sparkles className="h-4 w-4 mr-2" />
+          Estruturar Orçamento (IA)
         </Button>
       </section>
 
@@ -347,6 +358,23 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
           />
         </div>
       </section>
+      {/* MODAL DE LOADING DA IA (AGORA COM PORTAL) */}
+      {aiLoading &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm transition-all">
+            <div className="bg-white p-8 rounded-xl shadow-2xl flex flex-col items-center max-w-sm w-full animate-in fade-in zoom-in duration-200">
+              <Loader2 className="h-10 w-10 text-primary animate-spin mb-5" />
+              <h3 className="text-lg font-serif font-medium text-black text-center mb-2">
+                Estruturando Orçamento
+              </h3>
+              <p className="text-sm text-neutral-600 text-center animate-pulse h-5">
+                {loadingPhrases[loadingStep]}
+              </p>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
