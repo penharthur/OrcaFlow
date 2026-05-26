@@ -14,7 +14,68 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      clients: {
+        Row: {
+          address: string
+          created_at: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          address?: string
+          created_at?: string
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      quotes: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          id: string
+          payload: Json
+          status: string
+          total_value: number
+          user_id: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          payload?: Json
+          status?: string
+          total_value?: number
+          user_id: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          payload?: Json
+          status?: string
+          total_value?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotes_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
