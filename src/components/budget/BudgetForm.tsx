@@ -18,6 +18,12 @@ type Props = {
   setBackground: (v: string | null) => void;
 };
 
+const parseNum = (v: string): number | null => {
+  if (v.trim() === "") return null;
+  const n = parseFloat(v.replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+};
+
 export function BudgetForm({ data, setData, background, setBackground }: Props) {
   const onUpload = (file: File) => {
     const reader = new FileReader();
@@ -31,7 +37,7 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
   const addItem = () =>
     setData((d) => ({
       ...d,
-      items: [...d.items, { id: crypto.randomUUID(), description: "", quantity: 1, unitPrice: 0 }],
+      items: [...d.items, { id: crypto.randomUUID(), description: "", quantity: null, unitPrice: null }],
     }));
 
   const removeItem = (id: string) =>
@@ -46,12 +52,12 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
           <label className="inline-flex">
             <input
               type="file"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/jpg,image/webp"
               className="hidden"
               onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])}
             />
             <span className="inline-flex items-center gap-2 px-3 py-2 rounded-md border bg-card text-sm cursor-pointer hover:bg-accent transition">
-              <Upload className="h-4 w-4" /> Imagem de fundo
+              <Upload className="h-4 w-4" /> Imagem de fundo (JPG/PNG)
             </span>
           </label>
           {background && (
@@ -104,7 +110,8 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
         </div>
         <div className="space-y-3">
           {data.items.map((item, idx) => {
-            const subtotal = item.quantity * item.unitPrice;
+            const hasValues = item.quantity != null && item.unitPrice != null;
+            const subtotal = hasValues ? (item.quantity || 0) * (item.unitPrice || 0) : null;
             return (
               <div key={item.id} className="border rounded-lg p-3 bg-card space-y-3">
                 <div className="flex items-center justify-between">
@@ -118,28 +125,53 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
                 <Textarea
                   value={item.description}
                   onChange={(e) => updateItem(item.id, { description: e.target.value })}
-                  placeholder="Descrição do serviço"
-                  rows={2}
+                  placeholder="Descrição do serviço (suporta múltiplas linhas, listas com - ou •)"
+                  rows={5}
+                  className="min-h-[120px] resize-y font-mono text-sm leading-relaxed"
                 />
                 <div className="grid grid-cols-3 gap-2">
                   <div className="space-y-1">
-                    <Label className="text-xs">Qtd.</Label>
-                    <Input type="number" min={0} step="0.01" value={item.quantity}
-                      onChange={(e) => updateItem(item.id, { quantity: parseFloat(e.target.value) || 0 })} />
+                    <Label className="text-xs">Qtd. <span className="text-muted-foreground">(opcional)</span></Label>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="—"
+                      value={item.quantity ?? ""}
+                      onChange={(e) => updateItem(item.id, { quantity: parseNum(e.target.value) })}
+                    />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Valor un.</Label>
-                    <Input type="number" min={0} step="0.01" value={item.unitPrice}
-                      onChange={(e) => updateItem(item.id, { unitPrice: parseFloat(e.target.value) || 0 })} />
+                    <Label className="text-xs">Valor un. <span className="text-muted-foreground">(opcional)</span></Label>
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="—"
+                      value={item.unitPrice ?? ""}
+                      onChange={(e) => updateItem(item.id, { unitPrice: parseNum(e.target.value) })}
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Subtotal</Label>
-                    <Input readOnly value={subtotal.toFixed(2)} className="bg-muted" />
+                    <Input readOnly value={subtotal != null ? subtotal.toFixed(2) : "—"} className="bg-muted" />
                   </div>
                 </div>
               </div>
             );
           })}
+        </div>
+
+        <div className="space-y-2 pt-2 border-t">
+          <Label>Valor Total Geral (manual)</Label>
+          <Input
+            type="text"
+            inputMode="decimal"
+            placeholder="Ex.: 3500.00 — sobrescreve a soma automática"
+            value={data.manualTotal ?? ""}
+            onChange={(e) => setData((d) => ({ ...d, manualTotal: parseNum(e.target.value) }))}
+          />
+          <p className="text-xs text-muted-foreground">
+            Se preenchido, será exibido no preview no lugar do total calculado.
+          </p>
         </div>
       </section>
 
@@ -161,9 +193,24 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
           <Label>Prazo de realização</Label>
           <Input value={data.executionTerms} onChange={(e) => setData((d) => ({ ...d, executionTerms: e.target.value }))} />
         </div>
-        <div className="space-y-2">
-          <Label>E-mail / contato</Label>
-          <Input value={data.contactEmail} onChange={(e) => setData((d) => ({ ...d, contactEmail: e.target.value }))} placeholder="email@exemplo.com" />
+        <div className="grid grid-cols-1 gap-3">
+          <div className="space-y-2">
+            <Label>Telefone / WhatsApp</Label>
+            <Input
+              value={data.contactPhone}
+              onChange={(e) => setData((d) => ({ ...d, contactPhone: e.target.value }))}
+              placeholder="(11) 99999-9999"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>E-mail</Label>
+            <Input
+              type="email"
+              value={data.contactEmail}
+              onChange={(e) => setData((d) => ({ ...d, contactEmail: e.target.value }))}
+              placeholder="email@exemplo.com"
+            />
+          </div>
         </div>
       </section>
     </div>

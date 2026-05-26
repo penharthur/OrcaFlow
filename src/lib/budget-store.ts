@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 export type BudgetItem = {
   id: string;
   description: string;
-  quantity: number;
-  unitPrice: number;
+  quantity: number | null;
+  unitPrice: number | null;
 };
 
 export type BudgetData = {
@@ -12,10 +12,12 @@ export type BudgetData = {
   address: string;
   date: string; // ISO
   items: BudgetItem[];
+  manualTotal: number | null;
   materialIncluded: boolean;
   paymentTerms: string;
   executionTerms: string;
   contactEmail: string;
+  contactPhone: string;
 };
 
 const KEY = "budget:data";
@@ -26,11 +28,13 @@ export const defaultBudget = (): BudgetData => ({
   clientName: "",
   address: "",
   date: new Date().toISOString(),
-  items: [{ id: crypto.randomUUID(), description: "", quantity: 1, unitPrice: 0 }],
+  items: [{ id: crypto.randomUUID(), description: "", quantity: null, unitPrice: null }],
+  manualTotal: null,
   materialIncluded: false,
   paymentTerms: "50% no início, 50% na entrega",
   executionTerms: "A combinar",
   contactEmail: "",
+  contactPhone: "",
 });
 
 export function useBudget() {
