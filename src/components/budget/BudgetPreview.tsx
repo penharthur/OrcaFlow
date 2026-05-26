@@ -26,7 +26,6 @@ export const BudgetPreview = forwardRef<HTMLDivElement, Props>(({ data, backgrou
           }}
         />
       )}
-      {/* Watermark overlay for legibility */}
       {background && <div className="absolute inset-0 z-0 bg-white/70" />}
 
       <div className="relative z-10 flex flex-col min-h-[297mm]">
@@ -85,7 +84,9 @@ export const BudgetPreview = forwardRef<HTMLDivElement, Props>(({ data, backgrou
                         <td className="py-3 pr-3 text-neutral-900 whitespace-pre-line leading-relaxed">
                           {i.description || "—"}
                         </td>
-                        <td className="py-3 text-center text-neutral-800">{has ? i.quantity : ""}</td>
+                        <td className="py-3 text-center text-neutral-800">
+                          {has ? i.quantity : ""}
+                        </td>
                         <td className="py-3 text-right text-neutral-800">
                           {has ? formatBRL(i.unitPrice as number) : ""}
                         </td>
@@ -164,35 +165,33 @@ export const BudgetPreview = forwardRef<HTMLDivElement, Props>(({ data, backgrou
             </div>
           </section>
 
-          {/* Footer */}
-          <footer className="mt-14 pt-6 grid grid-cols-[1fr_auto] gap-8 items-end">
-            {/* Left: dynamic contacts */}
+          {/* Footer
+              Left  → e-mail + telefone (with icons)
+              Right → nome do profissional only (no signature line, no email repeat)
+          */}
+          <footer className="mt-14 pt-6 flex items-end justify-between gap-8">
             <div className="text-xs text-neutral-800 space-y-1.5">
-              {data.contactPhone && (
-                <div className="flex items-center gap-2">
-                  <Phone className="h-3.5 w-3.5 text-neutral-700" strokeWidth={2} />
-                  <span>{data.contactPhone}</span>
-                </div>
-              )}
               {data.contactEmail && (
                 <div className="flex items-center gap-2">
-                  <Mail className="h-3.5 w-3.5 text-neutral-700" strokeWidth={2} />
+                  <Mail className="h-3.5 w-3.5 text-neutral-700 shrink-0" strokeWidth={2} />
                   <span>{data.contactEmail}</span>
+                </div>
+              )}
+              {data.contactPhone && (
+                <div className="flex items-center gap-2">
+                  <Phone className="h-3.5 w-3.5 text-neutral-700 shrink-0" strokeWidth={2} />
+                  <span>{data.contactPhone}</span>
                 </div>
               )}
             </div>
 
-            {/* Right: signature block centered */}
-            <div className="text-center min-w-[260px]">
-              <div className="border-t-2 border-black pt-2">
+            {data.professionalName && (
+              <div className="text-right">
                 <p className="font-serif text-base text-black leading-tight">
-                  Luis Fernando Dias Penha
-                </p>
-                <p className="font-serif text-[11px] text-neutral-700 italic mt-0.5">
-                  luisfernandodiaspenha@gmail.com
+                  {data.professionalName}
                 </p>
               </div>
-            </div>
+            )}
           </footer>
         </div>
       </div>

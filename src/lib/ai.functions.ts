@@ -1,8 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
-import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-
-const Input = z.object({ scope: z.string().min(1).max(8000) });
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export type StructuredItem = {
   description: string;
@@ -10,77 +6,60 @@ export type StructuredItem = {
   unitPrice: number | null;
 };
 
-export const structureScope = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input) => Input.parse(input))
-  .handler(async ({ data }): Promise<{ items: StructuredItem[] }> => {
-    const apiKey = process.env.LOVABLE_API_KEY;
-    if (!apiKey) throw new Error("LOVABLE_API_KEY ausente");
+export async function structureScope(scope: string): Promise<{ items: StructuredItem[] }> {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+  if (!apiKey) throw new Error("VITE_GEMINI_API_KEY não configurada.");
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Você é assistente de um profissional de serviços gerais e pintura no Brasil. Analise o texto bruto de escopo e retorne uma lista estruturada de itens de orçamento. Cada item deve ter uma descrição clara em português. Quantidade e valor unitário são opcionais — só preencha se estiverem explícitos no texto. Use ponto como separador decimal.",
-          },
-          { role: "user", content: data.scope },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "set_items",
-              description: "Define os itens estruturados do orçamento.",
-              parameters: {
-                type: "object",
-                properties: {
-                  items: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        description: { type: "string" },
-                        quantity: { type: ["number", "null"] },
-                        unitPrice: { type: ["number", "null"] },
-                      },
-                      required: ["description"],
-                      additionalProperties: false,
-                    },
-                  },
-                },
-                required: ["items"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "set_items" } },
-      }),
-    });
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    if (!res.ok) {
-      const text = await res.text();
-      console.error("AI gateway error", res.status, text);
-      if (res.status === 429) throw new Error("Limite de uso atingido. Tente novamente em instantes.");
-      if (res.status === 402) throw new Error("Créditos de IA esgotados. Adicione créditos em Configurações.");
-      throw new Error("Falha ao chamar a IA");
-    }
-    const json = await res.json();
-    const call = json.choices?.[0]?.message?.tool_calls?.[0];
-    if (!call) return { items: [] };
-    const parsed = JSON.parse(call.function.arguments);
-    const items: StructuredItem[] = (parsed.items || []).map((i: any) => ({
-      description: String(i.description ?? "").trim(),
-      quantity: typeof i.quantity === "number" ? i.quantity : null,
-      unitPrice: typeof i.unitPrice === "number" ? i.unitPrice : null,
-    }));
-    return { items };
+  const prompt = `Você é assistente de um profissional de serviços gerais e pintura no Brasil.
+Analise o texto bruto de escopo abaixo e retorne ESTRITAMENTE um JSON (sem blocos markdown, sem texto extra) com a chave "items".
+Cada item deve ter:
+- "descricao": string — descrição clara em português
+- "quantidade": number ou null — só preencha se explícito no texto
+- "valor": number ou null — valor unitário em reais com ponto decimal, só se explícito
+
+Texto:
+${scope}`;
+
+  const result = await model.generateContent(prompt);
+  const raw = result.response.text().trim();
+
+  // Strip markdown fences if the model wrapped the JSON
+  const jsonText = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    throw new Error("A IA retornou um formato inesperado. Tente reformular o escopo.");
+  }
+
+  const rawItems: unknown[] = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray((parsed as Record<string, unknown>)?.items)
+      ? ((parsed as Record<string, unknown>).items as unknown[])
+      : [];
+
+  const items: StructuredItem[] = rawItems.map((i) => {
+    const item = i as Record<string, unknown>;
+    return {
+      description: String(item.descricao ?? item.description ?? "").trim(),
+      quantity:
+        typeof item.quantidade === "number"
+          ? item.quantidade
+          : typeof item.quantity === "number"
+            ? item.quantity
+            : null,
+      unitPrice:
+        typeof item.valor === "number"
+          ? item.valor
+          : typeof item.unitPrice === "number"
+            ? item.unitPrice
+            : null,
+    };
   });
+
+  return { items };
+}

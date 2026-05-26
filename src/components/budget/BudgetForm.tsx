@@ -18,7 +18,6 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { toast } from "sonner";
-import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,7 +47,6 @@ const parseNum = (v: string): number => {
 const headerLabel = "text-[11px] uppercase tracking-wider font-semibold text-slate-800";
 
 export function BudgetForm({ data, setData, background, setBackground }: Props) {
-  const structure = useServerFn(structureScope);
   const [aiLoading, setAiLoading] = useState(false);
 
   const sensors = useSensors(
@@ -87,7 +85,7 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
     }
     setAiLoading(true);
     try {
-      const { items } = await structure({ data: { scope: data.rawScope } });
+      const { items } = await structureScope(data.rawScope);
       if (!items.length) {
         toast.warning("A IA não retornou itens. Refine o texto e tente novamente.");
         return;
@@ -97,8 +95,8 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
         items: items.map((it) => ({ ...newItem(), ...it })),
       }));
       toast.success(`${items.length} itens estruturados pela IA.`);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Falha ao estruturar com IA");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Falha ao estruturar com IA");
     } finally {
       setAiLoading(false);
     }
@@ -167,10 +165,15 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
-                className={cn("w-full justify-start text-left font-normal", !data.date && "text-muted-foreground")}
+                className={cn(
+                  "w-full justify-start text-left font-normal",
+                  !data.date && "text-muted-foreground",
+                )}
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
-                {data.date ? format(new Date(data.date), "PPP", { locale: ptBR }) : "Selecionar data"}
+                {data.date
+                  ? format(new Date(data.date), "PPP", { locale: ptBR })
+                  : "Selecionar data"}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
@@ -202,7 +205,11 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
           className="min-h-[140px] font-mono text-sm leading-relaxed"
         />
         <Button onClick={runAI} disabled={aiLoading} className="w-full">
-          {aiLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+          {aiLoading ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4 mr-2" />
+          )}
           Estruturar Orçamento (IA)
         </Button>
       </section>
@@ -218,7 +225,10 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
           </Button>
         </div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={data.items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+          <SortableContext
+            items={data.items.map((i) => i.id)}
+            strategy={verticalListSortingStrategy}
+          >
             <div className="space-y-3">
               {data.items.map((item, idx) => (
                 <SortableItem
@@ -287,24 +297,37 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
             onChange={(e) => setData((d) => ({ ...d, executionTerms: e.target.value }))}
           />
         </div>
-        <div className="grid grid-cols-1 gap-3">
-          <div className="space-y-2">
-            <Label>Telefone / WhatsApp</Label>
-            <Input
-              value={data.contactPhone}
-              onChange={(e) => setData((d) => ({ ...d, contactPhone: e.target.value }))}
-              placeholder="(11) 99999-9999"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>E-mail</Label>
-            <Input
-              type="email"
-              value={data.contactEmail}
-              onChange={(e) => setData((d) => ({ ...d, contactEmail: e.target.value }))}
-              placeholder="email@exemplo.com"
-            />
-          </div>
+      </section>
+
+      {/* Professional info — pre-filled from auth, always editable */}
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Dados do profissional
+        </h2>
+        <div className="space-y-2">
+          <Label>Nome do profissional</Label>
+          <Input
+            value={data.professionalName}
+            onChange={(e) => setData((d) => ({ ...d, professionalName: e.target.value }))}
+            placeholder="Seu nome completo"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>E-mail</Label>
+          <Input
+            type="email"
+            value={data.contactEmail}
+            onChange={(e) => setData((d) => ({ ...d, contactEmail: e.target.value }))}
+            placeholder="email@exemplo.com"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Telefone / WhatsApp</Label>
+          <Input
+            value={data.contactPhone}
+            onChange={(e) => setData((d) => ({ ...d, contactPhone: e.target.value }))}
+            placeholder="(11) 99999-9999"
+          />
         </div>
       </section>
     </div>

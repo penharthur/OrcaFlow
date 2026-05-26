@@ -20,6 +20,7 @@ export type BudgetData = {
   materialIncluded: boolean;
   paymentTerms: string;
   executionTerms: string;
+  professionalName: string;
   contactEmail: string;
   contactPhone: string;
 };
@@ -46,6 +47,7 @@ export const defaultBudget = (): BudgetData => ({
   materialIncluded: false,
   paymentTerms: "50% no início, 50% na entrega",
   executionTerms: "A combinar",
+  professionalName: "",
   contactEmail: "",
   contactPhone: "",
 });
@@ -81,10 +83,7 @@ export const formatBRL = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 export function computeTotals(d: BudgetData) {
-  const subtotal = d.items.reduce(
-    (s, i) => s + (i.quantity ?? 0) * (i.unitPrice ?? 0),
-    0,
-  );
+  const subtotal = d.items.reduce((s, i) => s + (i.quantity ?? 0) * (i.unitPrice ?? 0), 0);
   const total = subtotal + (d.surcharge || 0) - (d.discount || 0);
   return { subtotal, total };
 }
