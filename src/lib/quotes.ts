@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { BudgetData } from "./budget-store";
-import { computeTotals } from "./budget-store";
+import { buildAddress, computeTotals } from "./budget-store";
 
 export async function searchClients(query: string) {
   const { data, error } = await supabase
@@ -15,7 +15,7 @@ export async function searchClients(query: string) {
 
 export async function saveQuote(budget: BudgetData, userId: string) {
   const name = budget.clientName.trim();
-  const address = budget.address.trim();
+  const address = buildAddress(budget, ", "); // compute inline address from structured fields
   if (!name) throw new Error("Informe o nome do cliente.");
 
   // Find existing clients with same name (case-insensitive)
@@ -27,7 +27,7 @@ export async function saveQuote(budget: BudgetData, userId: string) {
 
   let clientId: string | null = null;
   const sameAddress = existing?.find(
-    (c) => c.address.trim().toLowerCase() === address.toLowerCase(),
+    (c) => (c.address ?? "").trim().toLowerCase() === address.toLowerCase(),
   );
   if (sameAddress) {
     clientId = sameAddress.id;

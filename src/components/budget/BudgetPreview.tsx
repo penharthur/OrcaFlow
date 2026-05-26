@@ -2,7 +2,7 @@ import { forwardRef } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Mail, Phone } from "lucide-react";
-import { computeTotals, formatBRL, type BudgetData } from "@/lib/budget-store";
+import { buildAddress, computeTotals, formatBRL, type BudgetData } from "@/lib/budget-store";
 
 type Props = { data: BudgetData; background: string | null };
 
@@ -56,7 +56,7 @@ export const BudgetPreview = forwardRef<HTMLDivElement, Props>(({ data, backgrou
               <span className="uppercase tracking-wider text-[11px] text-slate-800 font-semibold">
                 Endereço
               </span>
-              <span className="text-neutral-900 whitespace-pre-line">{data.address || "—"}</span>
+              <span className="text-neutral-900 whitespace-pre-line">{buildAddress(data) || "—"}</span>
             </div>
           </header>
 

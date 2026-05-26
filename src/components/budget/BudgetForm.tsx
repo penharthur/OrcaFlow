@@ -37,6 +37,8 @@ type Props = {
   setData: (updater: (d: BudgetData) => BudgetData) => void;
   background: string | null;
   setBackground: (v: string | null) => void;
+  /** Optional override for file upload — used in index.tsx to sync to Supabase Storage */
+  onUpload?: (file: File) => void;
 };
 
 const parseNum = (v: string): number => {
@@ -47,7 +49,7 @@ const parseNum = (v: string): number => {
 
 const headerLabel = "text-[11px] uppercase tracking-wider font-semibold text-slate-800";
 
-export function BudgetForm({ data, setData, background, setBackground }: Props) {
+export function BudgetForm({ data, setData, background, setBackground, onUpload }: Props) {
   const [aiLoading, setAiLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
 
@@ -63,10 +65,14 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const onUpload = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => setBackground(reader.result as string);
-    reader.readAsDataURL(file);
+  const handleUpload = (file: File) => {
+    if (onUpload) {
+      onUpload(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = () => setBackground(reader.result as string);
+      reader.readAsDataURL(file);
+    }
   };
 
   const updateItem = (id: string, patch: Partial<BudgetData["items"][number]>) =>
@@ -149,7 +155,7 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
               type="file"
               accept="image/jpeg,image/png,image/jpg,image/webp"
               className="hidden"
-              onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])}
+              onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
             />
             <span className="inline-flex items-center gap-2 px-3 py-2 rounded-md border bg-card text-sm cursor-pointer hover:bg-accent transition">
               <Upload className="h-4 w-4" /> Carregar JPG/PNG
@@ -177,21 +183,59 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
               setData((d) => ({
                 ...d,
                 clientName: c.name,
-                address: c.address || d.address,
                 clientId: c.id,
+                // Migrate flat address from client record into the street field
+                addressStreet: c.address ? (d.addressStreet || c.address) : d.addressStreet,
               }))
             }
             placeholder="Nome do cliente"
           />
         </div>
+
+        {/* Structured address */}
         <div className="space-y-2">
-          <Label className={headerLabel}>Endereço</Label>
-          <Textarea
-            value={data.address}
-            onChange={(e) => setData((d) => ({ ...d, address: e.target.value }))}
-            placeholder="Rua, número, bairro, cidade"
-            rows={2}
+          <Label className={headerLabel}>Condomínio (opcional)</Label>
+          <Input
+            value={data.addressCondo}
+            onChange={(e) => setData((d) => ({ ...d, addressCondo: e.target.value }))}
+            placeholder="Ex: Residencial Park"
           />
+        </div>
+        <div className="grid grid-cols-[1fr_5rem] gap-2">
+          <div className="space-y-2">
+            <Label className={headerLabel}>Rua / Avenida</Label>
+            <Input
+              value={data.addressStreet}
+              onChange={(e) => setData((d) => ({ ...d, addressStreet: e.target.value }))}
+              placeholder="Rua das Flores"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className={headerLabel}>Nº</Label>
+            <Input
+              value={data.addressNumber}
+              onChange={(e) => setData((d) => ({ ...d, addressNumber: e.target.value }))}
+              placeholder="123"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-2">
+            <Label className={headerLabel}>Apartamento (opcional)</Label>
+            <Input
+              value={data.addressApt}
+              onChange={(e) => setData((d) => ({ ...d, addressApt: e.target.value }))}
+              placeholder="Apto 42"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className={headerLabel}>Cidade</Label>
+            <Input
+              value={data.addressCity}
+              onChange={(e) => setData((d) => ({ ...d, addressCity: e.target.value }))}
+              placeholder="Santos"
+            />
+          </div>
         </div>
         <div className="space-y-2">
           <Label className={headerLabel}>Data</Label>
@@ -356,6 +400,14 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
             value={data.professionalName}
             onChange={(e) => setData((d) => ({ ...d, professionalName: e.target.value }))}
             placeholder="Seu nome completo"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Cidade</Label>
+          <Input
+            value={data.city}
+            onChange={(e) => setData((d) => ({ ...d, city: e.target.value }))}
+            placeholder="Santos"
           />
         </div>
         <div className="space-y-2">

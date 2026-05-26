@@ -76,3 +76,124 @@ ${scope}`;
 
   return { items, valor_global };
 }
+
+/** Convert a File to base64 in chunks (avoids stack overflow on large files) */
+async function fileToBase64(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuffer);
+  let binary = "";
+  const CHUNK = 8192;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+/**
+ * Send a budget PDF to Gemini and extract client name, total value and service scope.
+ * The PDF is passed as inline base64 data — no extra library needed.
+ */
+export async function extractBudgetFromPDF(file: File): Promise<{
+  payerName: string;
+  value: number;
+  addressCondo: string;
+  addressStreet: string;
+  addressNumber: string;
+  addressApt: string;
+  addressCity: string;
+  serviceRaw: string;
+}> {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+  if (!apiKey) throw new Error("VITE_GEMINI_API_KEY não configurada.");
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+  const base64 = await fileToBase64(file);
+
+  const result = await model.generateContent([
+    {
+      inlineData: {
+        mimeType: "application/pdf",
+        data: base64,
+      },
+    },
+    {
+      text: `Analise este orçamento em PDF e retorne ESTRITAMENTE um JSON válido (sem markdown, sem \`\`\`json, sem texto extra) com:
+- "payerName": string — nome do cliente. Procure em "Aos cuidados de" ou campo similar.
+- "value": number — valor total do orçamento. Use ponto como decimal. Ex: 1250.00
+- "addressCondo": string — nome do condomínio, ou "" se não houver.
+- "addressStreet": string — rua ou avenida, ou "" se não encontrado.
+- "addressNumber": string — número do imóvel, ou "" se não encontrado.
+- "addressApt": string — apartamento, ou "" se não houver.
+- "addressCity": string — cidade do endereço, ou "" se não encontrado.
+- "serviceRaw": string — descrição completa dos serviços/itens, listando todos os itens encontrados.
+
+Retorne APENAS o JSON, sem nenhum texto antes ou depois.`,
+    },
+  ]);
+
+  const raw = result.response.text().trim();
+  const jsonText = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    throw new Error("A IA não conseguiu ler o PDF. Verifique se é um orçamento válido.");
+  }
+
+  const p = parsed as Record<string, unknown>;
+  const str = (k: string) => String(p[k] ?? "").trim();
+  return {
+    payerName: str("payerName"),
+    value:
+      typeof p.value === "number"
+        ? p.value
+        : parseFloat(String(p.value ?? "0").replace(",", ".")) || 0,
+    addressCondo: str("addressCondo"),
+    addressStreet: str("addressStreet"),
+    addressNumber: str("addressNumber"),
+    addressApt: str("addressApt"),
+    addressCity: str("addressCity"),
+    serviceRaw: str("serviceRaw"),
+  };
+}
+
+export async function generateReceiptText(
+  value: number,
+  serviceRaw: string,
+): Promise<{ serviceDescription: string; valueInWords: string }> {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+  if (!apiKey) throw new Error("VITE_GEMINI_API_KEY não configurada.");
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+  const formatted = value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+  const prompt = `Você é um assistente especialista em documentos jurídicos e financeiros no Brasil.
+Com base no serviço descrito e no valor informado, retorne ESTRITAMENTE um JSON válido (sem markdown, sem \`\`\`json, sem texto extra) com:
+- "serviceDescription": string — descrição profissional, concisa e formal do serviço em português, adequada para um recibo. Não repita o valor monetário. Ex: "execução de serviços de pintura interna no apartamento localizado na Rua das Flores, 123".
+- "valueInWords": string — o valor ${formatted} escrito por extenso em português. Use letras minúsculas. Ex: "seiscentos e cinquenta reais".
+
+Serviço descrito:
+${serviceRaw}`;
+
+  const result = await model.generateContent(prompt);
+  const raw = result.response.text().trim();
+  const jsonText = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    throw new Error("A IA retornou um formato inesperado.");
+  }
+
+  const p = parsed as Record<string, unknown>;
+  return {
+    serviceDescription: String(p.serviceDescription ?? "").trim(),
+    valueInWords: String(p.valueInWords ?? "").trim(),
+  };
+}
