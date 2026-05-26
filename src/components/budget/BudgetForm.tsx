@@ -1,6 +1,24 @@
+import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon, Plus, Trash2, Upload, X } from "lucide-react";
+import { CalendarIcon, Plus, Sparkles, Upload, X, Loader2 } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +27,10 @@ import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import type { BudgetData } from "@/lib/budget-store";
+import { newItem, type BudgetData } from "@/lib/budget-store";
+import { structureScope } from "@/lib/ai.functions";
+import { SortableItem } from "./SortableItem";
+import { ClientCombobox } from "./ClientCombobox";
 
 type Props = {
   data: BudgetData;
@@ -18,13 +39,23 @@ type Props = {
   setBackground: (v: string | null) => void;
 };
 
-const parseNum = (v: string): number | null => {
-  if (v.trim() === "") return null;
+const parseNum = (v: string): number => {
+  if (v.trim() === "") return 0;
   const n = parseFloat(v.replace(",", "."));
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) ? n : 0;
 };
 
+const headerLabel = "text-[11px] uppercase tracking-wider font-semibold text-slate-800";
+
 export function BudgetForm({ data, setData, background, setBackground }: Props) {
+  const structure = useServerFn(structureScope);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
   const onUpload = (file: File) => {
     const reader = new FileReader();
     reader.onload = () => setBackground(reader.result as string);
@@ -34,20 +65,52 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
   const updateItem = (id: string, patch: Partial<BudgetData["items"][number]>) =>
     setData((d) => ({ ...d, items: d.items.map((i) => (i.id === id ? { ...i, ...patch } : i)) }));
 
-  const addItem = () =>
-    setData((d) => ({
-      ...d,
-      items: [...d.items, { id: crypto.randomUUID(), description: "", quantity: null, unitPrice: null }],
-    }));
+  const addItem = () => setData((d) => ({ ...d, items: [...d.items, newItem()] }));
 
   const removeItem = (id: string) =>
     setData((d) => ({ ...d, items: d.items.filter((i) => i.id !== id) }));
+
+  const onDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setData((d) => {
+      const oldIndex = d.items.findIndex((i) => i.id === active.id);
+      const newIndex = d.items.findIndex((i) => i.id === over.id);
+      return { ...d, items: arrayMove(d.items, oldIndex, newIndex) };
+    });
+  };
+
+  const runAI = async () => {
+    if (!data.rawScope.trim()) {
+      toast.error("Escreva o escopo bruto antes de estruturar.");
+      return;
+    }
+    setAiLoading(true);
+    try {
+      const { items } = await structure({ data: { scope: data.rawScope } });
+      if (!items.length) {
+        toast.warning("A IA não retornou itens. Refine o texto e tente novamente.");
+        return;
+      }
+      setData((d) => ({
+        ...d,
+        items: items.map((it) => ({ ...newItem(), ...it })),
+      }));
+      toast.success(`${items.length} itens estruturados pela IA.`);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Falha ao estruturar com IA");
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-8">
       {/* Background */}
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Configurações visuais</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Imagem de fundo
+        </h2>
         <div className="flex items-center gap-3">
           <label className="inline-flex">
             <input
@@ -57,7 +120,7 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
               onChange={(e) => e.target.files?.[0] && onUpload(e.target.files[0])}
             />
             <span className="inline-flex items-center gap-2 px-3 py-2 rounded-md border bg-card text-sm cursor-pointer hover:bg-accent transition">
-              <Upload className="h-4 w-4" /> Imagem de fundo (JPG/PNG)
+              <Upload className="h-4 w-4" /> Carregar JPG/PNG
             </span>
           </label>
           {background && (
@@ -70,20 +133,42 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
 
       {/* Header */}
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Cabeçalho</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Cabeçalho
+        </h2>
         <div className="space-y-2">
-          <Label>Aos cuidados de</Label>
-          <Input value={data.clientName} onChange={(e) => setData((d) => ({ ...d, clientName: e.target.value }))} placeholder="Nome do cliente" />
+          <Label className={headerLabel}>Aos cuidados de</Label>
+          <ClientCombobox
+            value={data.clientName}
+            onChange={(name) => setData((d) => ({ ...d, clientName: name, clientId: null }))}
+            onSelect={(c) =>
+              setData((d) => ({
+                ...d,
+                clientName: c.name,
+                address: c.address || d.address,
+                clientId: c.id,
+              }))
+            }
+            placeholder="Nome do cliente"
+          />
         </div>
         <div className="space-y-2">
-          <Label>Endereço completo</Label>
-          <Textarea value={data.address} onChange={(e) => setData((d) => ({ ...d, address: e.target.value }))} placeholder="Rua, número, bairro, cidade" rows={2} />
+          <Label className={headerLabel}>Endereço</Label>
+          <Textarea
+            value={data.address}
+            onChange={(e) => setData((d) => ({ ...d, address: e.target.value }))}
+            placeholder="Rua, número, bairro, cidade"
+            rows={2}
+          />
         </div>
         <div className="space-y-2">
-          <Label>Data</Label>
+          <Label className={headerLabel}>Data</Label>
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !data.date && "text-muted-foreground")}>
+              <Button
+                variant="outline"
+                className={cn("w-full justify-start text-left font-normal", !data.date && "text-muted-foreground")}
+              >
                 <CalendarIcon className="mr-2 h-4 w-4" />
                 {data.date ? format(new Date(data.date), "PPP", { locale: ptBR }) : "Selecionar data"}
               </Button>
@@ -102,96 +187,105 @@ export function BudgetForm({ data, setData, background, setBackground }: Props) 
         </div>
       </section>
 
-      {/* Items */}
+      {/* AI scope */}
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Escopo bruto
+        </h2>
+        <Textarea
+          value={data.rawScope}
+          onChange={(e) => setData((d) => ({ ...d, rawScope: e.target.value }))}
+          rows={6}
+          placeholder={
+            "Cole aqui o escopo livre. Ex.:\n- Pintura de 2 paredes do quarto, 25m2\n- Reparo de rodapé\n- Substituir tomada da cozinha (R$ 80)"
+          }
+          className="min-h-[140px] font-mono text-sm leading-relaxed"
+        />
+        <Button onClick={runAI} disabled={aiLoading} className="w-full">
+          {aiLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+          Estruturar Orçamento (IA)
+        </Button>
+      </section>
+
+      {/* Items list */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Serviços</h2>
-          <Button size="sm" variant="outline" onClick={addItem}><Plus className="h-4 w-4 mr-1" /> Adicionar item</Button>
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Serviços ({data.items.length})
+          </h2>
+          <Button size="sm" variant="outline" onClick={addItem}>
+            <Plus className="h-4 w-4 mr-1" /> Adicionar
+          </Button>
         </div>
-        <div className="space-y-3">
-          {data.items.map((item, idx) => {
-            const hasValues = item.quantity != null && item.unitPrice != null;
-            const subtotal = hasValues ? (item.quantity || 0) * (item.unitPrice || 0) : null;
-            return (
-              <div key={item.id} className="border rounded-lg p-3 bg-card space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground font-medium">Item {idx + 1}</span>
-                  {data.items.length > 1 && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeItem(item.id)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-                <Textarea
-                  value={item.description}
-                  onChange={(e) => updateItem(item.id, { description: e.target.value })}
-                  placeholder="Descrição do serviço (suporta múltiplas linhas, listas com - ou •)"
-                  rows={5}
-                  className="min-h-[120px] resize-y font-mono text-sm leading-relaxed"
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={data.items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-3">
+              {data.items.map((item, idx) => (
+                <SortableItem
+                  key={item.id}
+                  item={item}
+                  index={idx}
+                  canRemove={data.items.length > 1}
+                  onChange={(patch) => updateItem(item.id, patch)}
+                  onRemove={() => removeItem(item.id)}
                 />
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Qtd. <span className="text-muted-foreground">(opcional)</span></Label>
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="—"
-                      value={item.quantity ?? ""}
-                      onChange={(e) => updateItem(item.id, { quantity: parseNum(e.target.value) })}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Valor un. <span className="text-muted-foreground">(opcional)</span></Label>
-                    <Input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="—"
-                      value={item.unitPrice ?? ""}
-                      onChange={(e) => updateItem(item.id, { unitPrice: parseNum(e.target.value) })}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Subtotal</Label>
-                    <Input readOnly value={subtotal != null ? subtotal.toFixed(2) : "—"} className="bg-muted" />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
 
-        <div className="space-y-2 pt-2 border-t">
-          <Label>Valor Total Geral (manual)</Label>
-          <Input
-            type="text"
-            inputMode="decimal"
-            placeholder="Ex.: 3500.00 — sobrescreve a soma automática"
-            value={data.manualTotal ?? ""}
-            onChange={(e) => setData((d) => ({ ...d, manualTotal: parseNum(e.target.value) }))}
-          />
-          <p className="text-xs text-muted-foreground">
-            Se preenchido, será exibido no preview no lugar do total calculado.
-          </p>
+        <div className="grid grid-cols-2 gap-3 pt-2 border-t">
+          <div className="space-y-1">
+            <Label className="text-xs">Acréscimo (R$)</Label>
+            <Input
+              inputMode="decimal"
+              value={data.surcharge || ""}
+              placeholder="0,00"
+              onChange={(e) => setData((d) => ({ ...d, surcharge: parseNum(e.target.value) }))}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Desconto (R$)</Label>
+            <Input
+              inputMode="decimal"
+              value={data.discount || ""}
+              placeholder="0,00"
+              onChange={(e) => setData((d) => ({ ...d, discount: parseNum(e.target.value) }))}
+            />
+          </div>
         </div>
       </section>
 
-      {/* Footer */}
+      {/* Conditions */}
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Condições</h2>
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Condições
+        </h2>
         <div className="flex items-center justify-between border rounded-lg p-3 bg-card">
           <div>
             <Label className="font-medium">Material incluso</Label>
-            <p className="text-xs text-muted-foreground">{data.materialIncluded ? "Material incluso no orçamento" : "Apenas mão de obra"}</p>
+            <p className="text-xs text-muted-foreground">
+              {data.materialIncluded ? "Material incluso no orçamento" : "Apenas mão de obra"}
+            </p>
           </div>
-          <Switch checked={data.materialIncluded} onCheckedChange={(v) => setData((d) => ({ ...d, materialIncluded: v }))} />
+          <Switch
+            checked={data.materialIncluded}
+            onCheckedChange={(v) => setData((d) => ({ ...d, materialIncluded: v }))}
+          />
         </div>
         <div className="space-y-2">
           <Label>Prazo de pagamento</Label>
-          <Input value={data.paymentTerms} onChange={(e) => setData((d) => ({ ...d, paymentTerms: e.target.value }))} />
+          <Input
+            value={data.paymentTerms}
+            onChange={(e) => setData((d) => ({ ...d, paymentTerms: e.target.value }))}
+          />
         </div>
         <div className="space-y-2">
           <Label>Prazo de realização</Label>
-          <Input value={data.executionTerms} onChange={(e) => setData((d) => ({ ...d, executionTerms: e.target.value }))} />
+          <Input
+            value={data.executionTerms}
+            onChange={(e) => setData((d) => ({ ...d, executionTerms: e.target.value }))}
+          />
         </div>
         <div className="grid grid-cols-1 gap-3">
           <div className="space-y-2">
