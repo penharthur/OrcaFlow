@@ -11,7 +11,7 @@ export async function structureScope(scope: string): Promise<{ items: Structured
   if (!apiKey) throw new Error("VITE_GEMINI_API_KEY não configurada.");
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
   const prompt = `Você é assistente de um profissional de serviços gerais e pintura no Brasil.
 Analise o texto bruto de escopo abaixo e retorne ESTRITAMENTE um JSON (sem blocos markdown, sem texto extra) com a chave "items".
