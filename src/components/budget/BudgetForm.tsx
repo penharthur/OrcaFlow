@@ -31,6 +31,7 @@ import { newItem, type BudgetData } from "@/lib/budget-store";
 import { structureScope } from "@/lib/ai.functions";
 import { SortableItem } from "./SortableItem";
 import { ClientCombobox } from "./ClientCombobox";
+import { PaymentTermsSelect, ExecutionTermsSelect } from "./TermsSelect";
 
 type Props = {
   data: BudgetData;
@@ -175,7 +176,7 @@ export function BudgetForm({ data, setData, background, setBackground, onUpload 
           Cabeçalho
         </h2>
         <div className="space-y-2">
-          <Label className={headerLabel}>Aos cuidados de</Label>
+          <Label className={headerLabel}>Aos cuidados de (nome curto)</Label>
           <ClientCombobox
             value={data.clientName}
             onChange={(name) => setData((d) => ({ ...d, clientName: name, clientId: null }))}
@@ -183,13 +184,30 @@ export function BudgetForm({ data, setData, background, setBackground, onUpload 
               setData((d) => ({
                 ...d,
                 clientName: c.name,
+                clientFullName: c.full_name || d.clientFullName,
                 clientId: c.id,
-                // Migrate flat address from client record into the street field
-                addressStreet: c.address ? (d.addressStreet || c.address) : d.addressStreet,
+                // Fill structured address fields (keep existing if already set)
+                addressCondo:  c.address_condo  ?? d.addressCondo,
+                addressStreet: c.address_street ?? d.addressStreet,
+                addressNumber: c.address_number ?? d.addressNumber,
+                addressApt:    c.address_apt    ?? d.addressApt,
+                addressCity:   c.address_city   ?? d.addressCity,
               }))
             }
             placeholder="Nome do cliente"
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label className={headerLabel}>Nome completo (para recibo)</Label>
+          <Input
+            value={data.clientFullName}
+            onChange={(e) => setData((d) => ({ ...d, clientFullName: e.target.value }))}
+            placeholder="Ex: José da Silva Santos"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Opcional — usado no texto do recibo como pagador.
+          </p>
         </div>
 
         {/* Structured address */}
@@ -375,16 +393,16 @@ export function BudgetForm({ data, setData, background, setBackground, onUpload 
         </div>
         <div className="space-y-2">
           <Label>Prazo de pagamento</Label>
-          <Input
+          <PaymentTermsSelect
             value={data.paymentTerms}
-            onChange={(e) => setData((d) => ({ ...d, paymentTerms: e.target.value }))}
+            onChange={(v) => setData((d) => ({ ...d, paymentTerms: v }))}
           />
         </div>
         <div className="space-y-2">
           <Label>Prazo de realização</Label>
-          <Input
+          <ExecutionTermsSelect
             value={data.executionTerms}
-            onChange={(e) => setData((d) => ({ ...d, executionTerms: e.target.value }))}
+            onChange={(v) => setData((d) => ({ ...d, executionTerms: v }))}
           />
         </div>
       </section>

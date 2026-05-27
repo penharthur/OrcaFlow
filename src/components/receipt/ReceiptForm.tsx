@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarIcon, Copy } from "lucide-react";
@@ -17,6 +16,7 @@ import {
   type BudgetData,
 } from "@/lib/budget-store";
 import type { ReceiptData } from "@/lib/receipt-store";
+import { ClientCombobox } from "@/components/budget/ClientCombobox";
 
 const parseNum = (v: string): number => {
   if (v.trim() === "") return 0;
@@ -60,13 +60,41 @@ export function ReceiptForm({ data, setData, budgetData, setBudgetData }: Props)
           Cliente (compartilhado com o orçamento)
         </h2>
 
+        {/* Client name — combobox with history (same as budget "Aos cuidados de") */}
         <div className="space-y-2">
-          <Label className={headerLabel}>Quem paga (cliente)</Label>
-          <Input
+          <Label className={headerLabel}>Quem paga — nome curto</Label>
+          <ClientCombobox
             value={budgetData.clientName}
-            onChange={(e) => setBudgetData((d) => ({ ...d, clientName: e.target.value }))}
+            onChange={(name) =>
+              setBudgetData((d) => ({ ...d, clientName: name, clientId: null }))
+            }
+            onSelect={(c) =>
+              setBudgetData((d) => ({
+                ...d,
+                clientName: c.name,
+                clientFullName: c.full_name || d.clientFullName,
+                clientId: c.id,
+                addressCondo:  c.address_condo  ?? d.addressCondo,
+                addressStreet: c.address_street ?? d.addressStreet,
+                addressNumber: c.address_number ?? d.addressNumber,
+                addressApt:    c.address_apt    ?? d.addressApt,
+                addressCity:   c.address_city   ?? d.addressCity,
+              }))
+            }
             placeholder="Nome do cliente / pagador"
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label className={headerLabel}>Nome completo (texto do recibo)</Label>
+          <Input
+            value={budgetData.clientFullName}
+            onChange={(e) => setBudgetData((d) => ({ ...d, clientFullName: e.target.value }))}
+            placeholder="Ex: José da Silva Santos"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Aparece no recibo: "recebi de <strong>nome completo</strong>". Se vazio, usa o nome curto.
+          </p>
         </div>
 
         <div className="space-y-2">

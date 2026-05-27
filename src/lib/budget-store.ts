@@ -10,6 +10,8 @@ export type BudgetItem = {
 
 export type BudgetData = {
   clientName: string;
+  /** Full legal name — optional, used in receipt body ("recebi de <full name>") */
+  clientFullName: string;
   clientId: string | null;
   /** Structured address — replaces the old flat `address: string` */
   addressCondo: string;   // Condomínio (optional)
@@ -45,6 +47,7 @@ export const newItem = (): BudgetItem => ({
 
 export const defaultBudget = (): BudgetData => ({
   clientName: "",
+  clientFullName: "",
   clientId: null,
   addressCondo: "",
   addressStreet: "",

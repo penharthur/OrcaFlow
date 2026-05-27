@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { searchClients } from "@/lib/quotes";
-
-type ClientRow = { id: string; name: string; address: string };
+import { searchClients, type ClientRow } from "@/lib/quotes";
 
 type Props = {
   value: string;
@@ -44,6 +42,16 @@ export function ClientCombobox({ value, onChange, onSelect, placeholder }: Props
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
+  /** Build a short inline address string from structured fields */
+  const formatAddress = (c: ClientRow): string => {
+    const parts: string[] = [];
+    if (c.address_condo) parts.push(`Cond. ${c.address_condo}`);
+    const street = [c.address_street, c.address_number].filter(Boolean).join(", ");
+    if (street) parts.push(street + (c.address_apt ? `, Apto ${c.address_apt}` : ""));
+    if (c.address_city) parts.push(c.address_city);
+    return parts.join(", ");
+  };
+
   return (
     <div className="relative" ref={boxRef}>
       <Input
@@ -59,22 +67,31 @@ export function ClientCombobox({ value, onChange, onSelect, placeholder }: Props
       {open && (results.length > 0 || loading) && (
         <div className="absolute z-20 mt-1 w-full rounded-md border bg-popover shadow-md max-h-64 overflow-auto">
           {loading && <div className="px-3 py-2 text-xs text-muted-foreground">Buscando…</div>}
-          {results.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className="w-full text-left px-3 py-2 hover:bg-accent text-sm border-b last:border-b-0"
-              onClick={() => {
-                onSelect(c);
-                setOpen(false);
-              }}
-            >
-              <div className="font-medium text-foreground">{c.name}</div>
-              {c.address && (
-                <div className="text-xs text-muted-foreground line-clamp-1">{c.address}</div>
-              )}
-            </button>
-          ))}
+          {results.map((c) => {
+            const addr = formatAddress(c);
+            return (
+              <button
+                key={c.id}
+                type="button"
+                className="w-full text-left px-3 py-2.5 hover:bg-accent text-sm border-b last:border-b-0"
+                onClick={() => {
+                  onSelect(c);
+                  setOpen(false);
+                }}
+              >
+                {/* Short name */}
+                <div className="font-medium text-foreground">{c.name}</div>
+                {/* Full name (if different from name) */}
+                {c.full_name && c.full_name !== c.name && (
+                  <div className="text-xs text-muted-foreground">{c.full_name}</div>
+                )}
+                {/* Inline address */}
+                {addr && (
+                  <div className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{addr}</div>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

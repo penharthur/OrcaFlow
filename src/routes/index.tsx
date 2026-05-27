@@ -1,9 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Download, LogOut, Loader2, Trash2 } from "lucide-react";
+import { Download, LogOut, Loader2, Trash2, History, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { BudgetForm } from "@/components/budget/BudgetForm";
 import { BudgetPreview } from "@/components/budget/BudgetPreview";
 import { ReceiptForm } from "@/components/receipt/ReceiptForm";
@@ -12,20 +19,26 @@ import { useBackground, useBudget, defaultBudget } from "@/lib/budget-store";
 import { useReceipt, defaultReceipt } from "@/lib/receipt-store";
 import { supabase } from "@/integrations/supabase/client";
 import { saveQuote } from "@/lib/quotes";
+import { saveReceipt } from "@/lib/receipts";
+
+type Tab = "budget" | "receipt";
 
 export const Route = createFileRoute("/")({
+  validateSearch: (s: Record<string, unknown>): { tab: Tab } => ({
+    tab: s.tab === "receipt" ? "receipt" : "budget",
+  }),
   component: Dashboard,
   head: () => ({ meta: [{ title: "OrçaFlow — Orçamentos" }] }),
 });
 
-type Tab = "budget" | "receipt";
-
 function Dashboard() {
   const navigate = useNavigate();
+  const { tab: searchTab } = Route.useSearch();
+
   const [userId, setUserId] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
   const [exporting, setExporting] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>("budget");
+  const [activeTab, setActiveTab] = useState<Tab>(searchTab ?? "budget");
 
   const [data, setData] = useBudget();
   const [receiptData, setReceiptData] = useReceipt();
@@ -33,33 +46,24 @@ function Dashboard() {
 
   const previewRef = useRef<HTMLDivElement>(null);
   const receiptRef = useRef<HTMLDivElement>(null);
-  // Prevent restoring background more than once per session
   const backgroundRestoredRef = useRef(false);
 
-  /** Upload background file: immediate local preview + async Supabase Storage sync */
   const handleBackgroundUpload = async (file: File) => {
-    // 1. Immediate local preview
     const reader = new FileReader();
     reader.onload = () => setBackground(reader.result as string);
     reader.readAsDataURL(file);
 
-    // 2. Sync to Supabase Storage (best-effort)
     if (!userId) return;
     try {
       const ext = file.name.split(".").pop() ?? "jpg";
       const path = `${userId}/background.${ext}`;
-
       const { error: uploadError } = await supabase.storage
         .from("backgrounds")
         .upload(path, file, { upsert: true, contentType: file.type });
-
       if (uploadError) throw uploadError;
-
       const { data: urlData } = supabase.storage.from("backgrounds").getPublicUrl(path);
-
       await supabase.auth.updateUser({ data: { backgroundUrl: urlData.publicUrl } });
     } catch (e) {
-      // Storage sync failure is non-fatal — local preview still works
       console.warn("Background sync to Supabase failed:", e);
     }
   };
@@ -77,7 +81,6 @@ function Dashboard() {
         setUserId(userData.user.id);
         const meta = userData.user.user_metadata as Record<string, string> | undefined;
 
-        // Pre-fill budget professional fields (only when blank)
         setData((d) => ({
           ...d,
           professionalName: d.professionalName || meta?.name || "",
@@ -85,7 +88,6 @@ function Dashboard() {
           contactPhone: d.contactPhone || meta?.phone || "",
         }));
 
-        // Pre-fill receipt fields (only when blank)
         setReceiptData((d) => ({
           ...d,
           receiverName: d.receiverName || meta?.name || "",
@@ -93,7 +95,6 @@ function Dashboard() {
           contactPhone: d.contactPhone || meta?.phone || "",
         }));
 
-        // Restore background from Supabase if not in localStorage (cross-device sync)
         if (!backgroundRestoredRef.current && meta?.backgroundUrl) {
           backgroundRestoredRef.current = true;
           setBackground((prev: string | null) => prev ?? meta.backgroundUrl);
@@ -108,13 +109,13 @@ function Dashboard() {
 
   const clearAll = () => {
     toast("Limpar tudo?", {
-      description: "Orçamento e recibo serão reiniciados. Dados do profissional e cidade são preservados.",
+      description:
+        "Orçamento e recibo serão reiniciados. Dados do profissional e cidade são preservados.",
       action: {
         label: "Limpar tudo",
         onClick: () => {
           setData((d) => ({
             ...defaultBudget(),
-            // Keep professional identity + preferred cities
             city: d.city,
             addressCity: d.addressCity,
             professionalName: d.professionalName,
@@ -123,7 +124,6 @@ function Dashboard() {
           }));
           setReceiptData((d) => ({
             ...defaultReceipt(),
-            // Keep professional identity + preferred city
             city: d.city,
             receiverName: d.receiverName,
             contactEmail: d.contactEmail,
@@ -132,10 +132,7 @@ function Dashboard() {
           toast.success("Formulários limpos.");
         },
       },
-      cancel: {
-        label: "Cancelar",
-        onClick: () => {},
-      },
+      cancel: { label: "Cancelar", onClick: () => {} },
     });
   };
 
@@ -151,7 +148,7 @@ function Dashboard() {
         window.print();
         try {
           await saveQuote(data, userId);
-          toast.success("Orçamento salvo com sucesso!");
+          toast.success("Orçamento exportado e salvo!");
         } catch (e: unknown) {
           toast.error(`Falha ao salvar no banco: ${e instanceof Error ? e.message : e}`);
         }
@@ -166,6 +163,12 @@ function Dashboard() {
       document.title = `Recibo de ${payerName}`;
       try {
         window.print();
+        try {
+          await saveReceipt(receiptData, data, userId);
+          toast.success("Recibo exportado e salvo!");
+        } catch (e: unknown) {
+          toast.error(`Falha ao salvar recibo: ${e instanceof Error ? e.message : e}`);
+        }
       } catch {
         toast.error("Erro ao processar a impressão.");
       } finally {
@@ -187,77 +190,156 @@ function Dashboard() {
       <style>
         {`
           @media print {
-            * {
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
-            @page {
-              margin: 0mm;
-            }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            @page { margin: 0mm; }
           }
         `}
       </style>
 
-      <header className="sticky top-0 z-10 bg-background/80 backdrop-blur border-b print:hidden">
-        <div className="max-w-[1600px] mx-auto px-6 py-3 flex items-center justify-between gap-4">
-          {/* Logo */}
-          <div className="shrink-0">
-            <h1 className="font-serif text-xl leading-none">OrçaFlow</h1>
-            <p className="text-xs text-muted-foreground">
-              {data.professionalName || "Orçamentos profissionais"}
-            </p>
+      {/* ── Header ──────────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur border-b print:hidden">
+        <div className="max-w-[1600px] mx-auto px-4 lg:px-6">
+
+          {/* Top row — logo + actions */}
+          <div className="flex items-center justify-between gap-3 py-3">
+
+            {/* Logo */}
+            <div className="shrink-0 min-w-0">
+              <h1 className="font-serif text-xl leading-none">OrçaFlow</h1>
+              <p className="hidden sm:block text-xs text-muted-foreground truncate max-w-[180px]">
+                {data.professionalName || "Orçamentos profissionais"}
+              </p>
+            </div>
+
+            {/* Tab switcher — desktop only (mobile is the row below) */}
+            <div className="hidden sm:flex items-center border rounded-lg overflow-hidden text-sm shrink-0">
+              <button
+                onClick={() => setActiveTab("budget")}
+                className={cn(
+                  "px-4 py-1.5 transition-colors font-medium",
+                  activeTab === "budget"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-accent text-muted-foreground",
+                )}
+              >
+                Orçamento
+              </button>
+              <button
+                onClick={() => setActiveTab("receipt")}
+                className={cn(
+                  "px-4 py-1.5 transition-colors border-l font-medium",
+                  activeTab === "receipt"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-accent text-muted-foreground",
+                )}
+              >
+                Recibo
+              </button>
+            </div>
+
+            {/* Right actions */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Export PDF — always visible, label hidden on smallest screens */}
+              <Button
+                onClick={exportPdf}
+                disabled={exporting}
+                size="sm"
+                className="h-9 px-3 sm:px-4"
+              >
+                {exporting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                <span className="ml-1.5 hidden min-[400px]:inline text-sm">Exportar PDF</span>
+              </Button>
+
+              {/* Desktop secondary actions */}
+              <div className="hidden md:flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate({ to: "/admin" })}
+                  className="h-9"
+                >
+                  <History className="h-4 w-4 mr-1.5" />
+                  Histórico
+                </Button>
+                <Button variant="ghost" size="sm" onClick={clearAll} className="h-9">
+                  <Trash2 className="h-4 w-4 mr-1.5" />
+                  Limpar
+                </Button>
+                <Button variant="ghost" size="icon" onClick={logout} title="Sair" className="h-9 w-9">
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Mobile/tablet overflow menu */}
+              <div className="md:hidden">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-9 w-9">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuItem onClick={() => navigate({ to: "/admin" })}>
+                      <History className="h-4 w-4 mr-2" />
+                      Histórico
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={clearAll}>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Limpar tudo
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={logout}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <LogOut className="h-4 w-4 mr-2" />
+                      Sair
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
           </div>
 
-          {/* Tab switcher */}
-          <div className="flex items-center border rounded-lg overflow-hidden text-sm shrink-0">
-            <button
-              onClick={() => setActiveTab("budget")}
-              className={cn(
-                "px-4 py-1.5 transition-colors",
-                activeTab === "budget"
-                  ? "bg-primary text-primary-foreground"
-                  : "hover:bg-accent text-muted-foreground",
-              )}
-            >
-              Orçamento
-            </button>
-            <button
-              onClick={() => setActiveTab("receipt")}
-              className={cn(
-                "px-4 py-1.5 transition-colors border-l",
-                activeTab === "receipt"
-                  ? "bg-primary text-primary-foreground"
-                  : "hover:bg-accent text-muted-foreground",
-              )}
-            >
-              Recibo
-            </button>
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-2 shrink-0">
-            <Button variant="ghost" size="sm" onClick={clearAll} title="Limpar formulários">
-              <Trash2 className="h-4 w-4 mr-1.5" />
-              Limpar
-            </Button>
-            <Button onClick={exportPdf} disabled={exporting}>
-              {exporting ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Download className="h-4 w-4 mr-2" />
-              )}
-              Exportar PDF
-            </Button>
-            <Button variant="ghost" size="icon" onClick={logout} title="Sair">
-              <LogOut className="h-4 w-4" />
-            </Button>
+          {/* Mobile tab switcher — second row (hidden on sm+) */}
+          <div className="sm:hidden pb-3">
+            <div className="flex items-center border rounded-lg overflow-hidden text-sm">
+              <button
+                onClick={() => setActiveTab("budget")}
+                className={cn(
+                  "flex-1 py-2.5 text-center font-medium transition-colors",
+                  activeTab === "budget"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-accent text-muted-foreground",
+                )}
+              >
+                Orçamento
+              </button>
+              <button
+                onClick={() => setActiveTab("receipt")}
+                className={cn(
+                  "flex-1 py-2.5 text-center font-medium transition-colors border-l",
+                  activeTab === "receipt"
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-accent text-muted-foreground",
+                )}
+              >
+                Recibo
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-[1600px] mx-auto px-6 py-6 grid lg:grid-cols-[420px_1fr] gap-6 print:block print:p-0">
-        {/* Form panel (hidden on print) */}
-        <aside className="lg:sticky lg:top-[88px] lg:self-start lg:max-h-[calc(100vh-104px)] lg:overflow-y-auto pr-2 print:hidden">
+      {/* ── Main content ─────────────────────────────────────────────────────── */}
+      <main className="max-w-[1600px] mx-auto px-4 lg:px-6 py-4 lg:py-6 lg:grid lg:grid-cols-[420px_1fr] lg:gap-6 print:block print:p-0">
+
+        {/* Form panel — sticky sidebar on desktop, plain on mobile */}
+        <aside className="lg:sticky lg:top-[72px] lg:self-start lg:max-h-[calc(100vh-88px)] lg:overflow-y-auto lg:pr-2 print:hidden">
           {activeTab === "budget" ? (
             <BudgetForm
               data={data}
@@ -276,19 +358,27 @@ function Dashboard() {
           )}
         </aside>
 
-        {/* Preview panel — only active document renders, so print works naturally */}
-        <section className="flex justify-center overflow-x-auto print:block print:overflow-visible">
-          <div className="origin-top scale-[0.85] xl:scale-100 transition-transform print:scale-100">
-            {activeTab === "budget" ? (
-              <BudgetPreview ref={previewRef} data={data} background={background} />
-            ) : (
-              <ReceiptPreview
-                ref={receiptRef}
-                data={receiptData}
-                budgetData={data}
-                background={background}
-              />
-            )}
+        {/* Preview panel */}
+        <section className="mt-8 lg:mt-0 overflow-x-auto print:block print:overflow-visible">
+          {/* Mobile section label */}
+          <p className="lg:hidden text-[10px] uppercase tracking-widest font-semibold text-muted-foreground text-center mb-4">
+            Pré-visualização
+          </p>
+
+          {/* The preview-scale-inner class handles responsive scaling via styles.css */}
+          <div className="flex justify-center">
+            <div className="preview-scale-inner">
+              {activeTab === "budget" ? (
+                <BudgetPreview ref={previewRef} data={data} background={background} />
+              ) : (
+                <ReceiptPreview
+                  ref={receiptRef}
+                  data={receiptData}
+                  budgetData={data}
+                  background={background}
+                />
+              )}
+            </div>
           </div>
         </section>
       </main>

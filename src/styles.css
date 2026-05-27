@@ -99,4 +99,61 @@
   body * { visibility: hidden; }
   .a4-sheet, .a4-sheet * { visibility: visible; }
   .a4-sheet { box-shadow: none; margin: 0; }
+  .preview-scale-inner {
+    transform: none !important;
+    margin-inline: 0 !important;
+    margin-bottom: 0 !important;
+  }
+}
+
+/* ── Responsive A4 preview scaling ────────────────────────────────────────────
+   Uses transform + negative margins so the container footprint matches the
+   visual (scaled) size. transform-origin: top center keeps it centred.
+   Print block above resets everything so the full-size sheet prints correctly.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.preview-scale-inner {
+  transform-origin: top center;
+  transition: transform 150ms ease, margin 150ms ease;
+
+  /* ≤ 479 px — S24 (393 px) and smaller phones */
+  transform: scale(0.44);
+  margin-inline: calc((0.44 - 1) / 2 * 210mm);   /* -58.8 mm each side */
+  margin-bottom: calc((0.44 - 1) * 297mm);        /* -166.3 mm          */
+}
+
+/* 480 px — larger phones / landscape */
+@media (min-width: 480px) {
+  .preview-scale-inner {
+    transform: scale(0.56);
+    margin-inline: calc((0.56 - 1) / 2 * 210mm);
+    margin-bottom: calc((0.56 - 1) * 297mm);
+  }
+}
+
+/* 640 px — small tablets / landscape phone */
+@media (min-width: 640px) {
+  .preview-scale-inner {
+    transform: scale(0.74);
+    margin-inline: calc((0.74 - 1) / 2 * 210mm);
+    margin-bottom: calc((0.74 - 1) * 297mm);
+  }
+}
+
+/* 1024 px — desktop with side panel (420 px form + 24 px gap = ~580 px left) */
+@media (min-width: 1024px) {
+  .preview-scale-inner {
+    transform: scale(0.76);
+    margin-inline: calc((0.76 - 1) / 2 * 210mm);
+    margin-bottom: calc((0.76 - 1) * 297mm);
+  }
+}
+
+/* 1280 px — wide desktop, preview column ≈ 790 px → render at 100 % */
+@media (min-width: 1280px) {
+  .preview-scale-inner {
+    transform: scale(1);
+    margin-inline: 0;
+    margin-bottom: 0;
+  }
 }

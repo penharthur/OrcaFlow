@@ -19,7 +19,8 @@ export const ReceiptPreview = forwardRef<HTMLDivElement, Props>(
     const month = format(dateObj, "MMMM", { locale: ptBR });
     const year = format(dateObj, "yyyy");
 
-    const payerName = budgetData.clientName || "—";
+    // Full name preferred for legal text; falls back to short name
+    const payerName = budgetData.clientFullName || budgetData.clientName || "—";
 
     // Auto mode: "serviços realizados em [address]"
     // Custom mode: whatever the user typed
