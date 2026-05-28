@@ -9,8 +9,10 @@ type Props = { data: BudgetData; background: string | null };
 export const BudgetPreview = forwardRef<HTMLDivElement, Props>(({ data, background }, ref) => {
   const { subtotal, total, isGlobal } = computeTotals(data);
   const anyItemHasValues = data.items.some((i) => i.quantity != null || i.unitPrice != null);
-  const showTable = anyItemHasValues && !isGlobal;
-  const showTotal = total !== 0 || subtotal !== 0 || isGlobal;
+  const anyItemHasQty   = data.items.some((i) => i.quantity != null);
+  const showTable    = anyItemHasValues && !isGlobal;
+  const showQtyOnly  = isGlobal && anyItemHasQty;
+  const showTotal    = total !== 0 || subtotal !== 0 || isGlobal;
 
   return (
     <div ref={ref} className="a4-sheet relative overflow-hidden">
@@ -102,6 +104,27 @@ export const BudgetPreview = forwardRef<HTMLDivElement, Props>(({ data, backgrou
                       </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            ) : showQtyOnly ? (
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="text-left text-[10px] uppercase tracking-wider text-slate-700 font-semibold border-b border-neutral-400">
+                    <th className="py-2">Descrição</th>
+                    <th className="py-2 text-center w-16">Qtd.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.items.map((i) => (
+                    <tr key={i.id} className="border-b border-neutral-200 align-top">
+                      <td className="py-3 pr-3 text-neutral-900 whitespace-pre-line leading-relaxed">
+                        {i.description || "—"}
+                      </td>
+                      <td className="py-3 text-center text-neutral-800">
+                        {i.quantity != null ? i.quantity : ""}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             ) : (

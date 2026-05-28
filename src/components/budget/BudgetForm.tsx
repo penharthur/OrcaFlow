@@ -346,9 +346,16 @@ export function BudgetForm({ data, setData, background, setBackground, onUpload 
               placeholder="0,00"
               onChange={(e) => setData((d) => ({ ...d, globalValue: parseNum(e.target.value) }))}
             />
-            <p className="text-[11px] text-muted-foreground leading-snug">
-              Quando preenchido, aparece direto no total — ideal para orçamentos sem preço por item.
-            </p>
+            {data.globalValue > 0 ? (
+              <p className="text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                ⚠ Valor global ativo — os valores individuais por serviço não aparecem no documento.
+                Para exibi-los, remova o valor global.
+              </p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Quando preenchido, aparece direto no total — ideal para orçamentos sem preço por item.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
