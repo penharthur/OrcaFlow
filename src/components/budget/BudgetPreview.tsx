@@ -8,7 +8,7 @@ type Props = { data: BudgetData; background: string | null };
 
 export const BudgetPreview = forwardRef<HTMLDivElement, Props>(({ data, background }, ref) => {
   const { subtotal, total, isGlobal } = computeTotals(data);
-  const anyItemHasValues = data.items.some((i) => i.quantity != null && i.unitPrice != null);
+  const anyItemHasValues = data.items.some((i) => i.quantity != null || i.unitPrice != null);
   const showTable = anyItemHasValues && !isGlobal;
   const showTotal = total !== 0 || subtotal !== 0 || isGlobal;
 
@@ -78,20 +78,26 @@ export const BudgetPreview = forwardRef<HTMLDivElement, Props>(({ data, backgrou
                 </thead>
                 <tbody>
                   {data.items.map((i) => {
-                    const has = i.quantity != null && i.unitPrice != null;
+                    const hasQty   = i.quantity  != null;
+                    const hasPrice = i.unitPrice != null;
+                    const hasBoth  = hasQty && hasPrice;
                     return (
                       <tr key={i.id} className="border-b border-neutral-200 align-top">
                         <td className="py-3 pr-3 text-neutral-900 whitespace-pre-line leading-relaxed">
                           {i.description || "—"}
                         </td>
                         <td className="py-3 text-center text-neutral-800">
-                          {has ? i.quantity : ""}
+                          {hasQty ? i.quantity : ""}
                         </td>
                         <td className="py-3 text-right text-neutral-800">
-                          {has ? formatBRL(i.unitPrice as number) : ""}
+                          {hasPrice ? formatBRL(i.unitPrice as number) : hasQty ? "—" : ""}
                         </td>
                         <td className="py-3 text-right text-black font-medium">
-                          {has ? formatBRL((i.quantity as number) * (i.unitPrice as number)) : ""}
+                          {hasBoth
+                            ? formatBRL((i.quantity as number) * (i.unitPrice as number))
+                            : hasQty
+                            ? "—"
+                            : ""}
                         </td>
                       </tr>
                     );
