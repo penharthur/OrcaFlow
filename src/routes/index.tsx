@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+﻿import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { Download, LogOut, Loader2, Trash2, History, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
@@ -191,7 +191,6 @@ function Dashboard() {
         {`
           @media print {
             * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            @page { margin: 0mm; }
           }
         `}
       </style>
