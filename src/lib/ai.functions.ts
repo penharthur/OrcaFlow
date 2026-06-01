@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+﻿import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export type StructuredItem = {
   description: string;
@@ -8,7 +8,7 @@ export type StructuredItem = {
 
 export async function structureScope(
   scope: string,
-): Promise<{ items: StructuredItem[]; valor_global: number | null }> {
+): Promise<{ items: StructuredItem[]; valor_global: number | null; observations: string[] }> {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
   if (!apiKey) throw new Error("VITE_GEMINI_API_KEY não configurada.");
 
@@ -16,21 +16,31 @@ export async function structureScope(
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const prompt = `Você é um assistente especialista em orçamentos de serviços gerais e obras no Brasil.
-Analise o texto bruto de escopo abaixo e retorne ESTRITAMENTE um JSON válido (sem marcações markdown, sem \`\`\`json, sem texto extra) com um objeto contendo as chaves "items" e "valor_global".
+Analise o texto bruto de escopo abaixo e retorne ESTRITAMENTE um JSON válido (sem marcações markdown, sem \`\`\`json, sem texto extra) com um objeto contendo as chaves "items", "valor_global" e "observacoes".
 
-Regras obrigatórias para cada item em "items":
-- "descricao": string — descrição clara e profissional do serviço em português.
-- "quantidade": number ou null — identifique a quantidade exata. Se o texto usar palavras como "ambas", "as duas" ou "par", converta para 2.
-- "valor": number ou null — SEMPRE o valor UNITÁRIO. Se o texto informar valor total para quantidade > 1, DIVIDA pelo total de unidades. Use ponto como decimal, sem "R$".
+Regras para "items" — lista de serviços/tarefas a executar:
+- "descricao": string — descrição clara e profissional em português.
+- "quantidade": number ou null — identifique a quantidade (m², kg, unidades, etc.). Se usar "ambas", "as duas" ou "par", converta para 2. Se não informado, use null.
+- "valor": number ou null — SEMPRE o valor UNITÁRIO. Se o texto informar valor total para quantidade > 1, DIVIDA. Use ponto como decimal, sem "R". Se for valor global único, use null.
 
 Regra para "valor_global":
-- Se o texto mencionar um valor único para TODOS os serviços juntos (ex: "tudo por 650", "valor total 800", "cobro 500 pelo serviço todo"), coloque esse valor em "valor_global" e deixe "valor" de cada item como null.
-- Se os valores forem por item individual, deixe "valor_global" como null e preencha "valor" em cada item.
+- Se o texto mencionar um valor único para TODOS os serviços juntos (ex: "tudo por 650", " 33.500,00", "R 33.500,00"), extraia esse número em "valor_global" e deixe "valor" de cada item como null.
+- IMPORTANTE: ignore separadores de milhar — "33.500,00" = 33500.00, "1.200,00" = 1200.00.
+- Se os valores forem por item, deixe "valor_global" como null e preencha "valor" em cada item.
 - "valor_global" é number ou null.
 
-Texto bruto do escopo:
-${scope}`;
+Regras para "observacoes" — lista de notas, ressalvas e condições especiais:
+- Extraia textos marcados como "Obs", "Obs:", "Obs 1", "Obs 2", "Observação", etc.
+- Inclua qualquer condição especial, exigência externa, ressalva ou nota que NÃO seja um serviço a executar.
+- Cada observação é uma string. Preserve o texto original (pode corrigir ortografia óbvia), sem truncar.
+- Retorne array vazio [] se não houver observações.
+- NÃO inclua em "observacoes": serviços executáveis, valores monetários, prazos de pagamento.
 
+O que vai para "items": serviços manuais, mão de obra, materiais aplicados, taxas obrigatórias (ex: "Seguro da obra", "Retirada do entulho").
+O que vai para "observacoes": notas explicativas, condições impostas por terceiros, ressalvas técnicas.
+
+Texto bruto do escopo:
+${scope}`
   const result = await model.generateContent(prompt);
   const raw = result.response.text().trim();
 
@@ -74,7 +84,12 @@ ${scope}`;
       ? ((parsed as Record<string, unknown>).valor_global as number)
       : null;
 
-  return { items, valor_global };
+  const rawObs: unknown[] = Array.isArray((parsed as Record<string, unknown>)?.observacoes)
+    ? ((parsed as Record<string, unknown>).observacoes as unknown[])
+    : [];
+  const observations: string[] = rawObs.map((o) => String(o).trim()).filter(Boolean);
+
+  return { items, valor_global, observations };
 }
 
 /** Convert a File to base64 in chunks (avoids stack overflow on large files) */

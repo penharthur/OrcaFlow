@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -84,6 +84,21 @@ export function BudgetForm({ data, setData, background, setBackground, onUpload 
   const removeItem = (id: string) =>
     setData((d) => ({ ...d, items: d.items.filter((i) => i.id !== id) }));
 
+  const addObservation = () =>
+    setData((d) => ({ ...d, observations: [...(d.observations ?? []), ""] }));
+
+  const updateObservation = (idx: number, value: string) =>
+    setData((d) => ({
+      ...d,
+      observations: (d.observations ?? []).map((o, i) => (i === idx ? value : o)),
+    }));
+
+  const removeObservation = (idx: number) =>
+    setData((d) => ({
+      ...d,
+      observations: (d.observations ?? []).filter((_, i) => i !== idx),
+    }));
+
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -112,7 +127,7 @@ export function BudgetForm({ data, setData, background, setBackground, onUpload 
     }
     setAiLoading(true);
     try {
-      const { items, valor_global } = await structureScope(data.rawScope);
+      const { items, valor_global, observations } = await structureScope(data.rawScope);
       if (!items.length) {
         toast.warning("A IA não retornou itens. Refine o texto e tente novamente.");
         return;
@@ -121,6 +136,7 @@ export function BudgetForm({ data, setData, background, setBackground, onUpload 
         ...d,
         items: items.map((it) => ({ ...newItem(), ...it })),
         globalValue: valor_global ?? 0,
+        observations,
       }));
       const globalMsg = valor_global ? ` • Valor global: R$ ${valor_global.toFixed(2).replace(".", ",")}` : "";
       toast.success(`${items.length} itens estruturados pela IA.${globalMsg}`);
@@ -379,6 +395,45 @@ export function BudgetForm({ data, setData, background, setBackground, onUpload 
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Observations */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+            Observações
+          </h2>
+          <Button size="sm" variant="outline" onClick={addObservation}>
+            <Plus className="h-4 w-4 mr-1" /> Adicionar
+          </Button>
+        </div>
+        {(data.observations ?? []).length === 0 && (
+          <p className="text-[11px] text-muted-foreground">
+            Adicione notas ou ressalvas que aparecerão abaixo dos serviços no documento.
+          </p>
+        )}
+        {(data.observations ?? []).map((obs, idx) => (
+          <div key={idx} className="flex gap-2 items-start">
+            <span className="text-xs font-semibold text-muted-foreground mt-2.5 shrink-0 w-4">
+              {idx + 1}.
+            </span>
+            <Textarea
+              value={obs}
+              onChange={(e) => updateObservation(idx, e.target.value)}
+              rows={2}
+              placeholder={`Observação ${idx + 1}`}
+              className="text-sm flex-1 min-h-0"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => removeObservation(idx)}
+              className="h-8 w-8 shrink-0 mt-1 text-muted-foreground hover:text-destructive"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ))}
       </section>
 
       {/* Conditions */}

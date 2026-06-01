@@ -33,6 +33,8 @@ export type BudgetData = {
   contactPhone: string;
   /** Valor global do serviço. Quando > 0, substitui o cálculo por item no total. */
   globalValue: number;
+  /** Observações livres exibidas abaixo da tabela de serviços */
+  observations: string[];
 };
 
 const KEY = "budget:data";
@@ -67,6 +69,7 @@ export const defaultBudget = (): BudgetData => ({
   contactEmail: "",
   contactPhone: "",
   globalValue: 0,
+  observations: [],
 });
 
 /**
