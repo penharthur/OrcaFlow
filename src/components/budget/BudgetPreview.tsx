@@ -100,7 +100,7 @@ export const BudgetPreview = forwardRef<HTMLDivElement, Props>(({ data, backgrou
                           {i.description || "—"}
                         </td>
                         <td className="py-2 text-center text-neutral-800">
-                          {hasQty ? i.quantity : ""}
+                          {hasQty ? (i.unit ? ` ` : i.quantity) : ""}
                         </td>
                         <td className="py-2 text-right text-neutral-800">
                           {hasPrice ? formatBRL(i.unitPrice as number) : hasQty ? "—" : ""}
@@ -132,7 +132,7 @@ export const BudgetPreview = forwardRef<HTMLDivElement, Props>(({ data, backgrou
                         {i.description || "—"}
                       </td>
                       <td className="py-2 text-center text-neutral-800">
-                        {i.quantity != null ? i.quantity : ""}
+                        {i.quantity != null ? (i.unit ? ` ` : i.quantity) : ""}
                       </td>
                     </tr>
                   ))}

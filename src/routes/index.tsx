@@ -1,6 +1,7 @@
 ﻿import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Download, LogOut, Loader2, Trash2, History, MoreVertical } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Download, LogOut, Loader2, Trash2, History, MoreVertical, Save } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,9 @@ function Dashboard() {
   const [userId, setUserId] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [showSavePrompt, setShowSavePrompt]   = useState(false);
+  const [pendingSave, setPendingSave]          = useState<(() => Promise<void>) | null>(null);
+  const [savingToHistory, setSavingToHistory]  = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>(searchTab ?? "budget");
 
   const [data, setData] = useBudget();
@@ -140,45 +144,50 @@ function Dashboard() {
     if (!userId) return;
     setExporting(true);
     const originalTitle = document.title;
+    const isReceipt = activeTab === "receipt";
 
-    if (activeTab === "budget") {
-      const clientName = data.clientName.trim() || "cliente";
-      document.title = `Orçamento de ${clientName}`;
-      try {
-        window.print();
-        try {
-          await saveQuote(data, userId);
-          toast.success("Orçamento exportado e salvo!");
-        } catch (e: unknown) {
-          toast.error(`Falha ao salvar no banco: ${e instanceof Error ? e.message : e}`);
-        }
-      } catch {
-        toast.error("Erro ao processar a impressão.");
-      } finally {
-        document.title = originalTitle;
-        setExporting(false);
-      }
-    } else {
-      const payerName = data.clientName.trim() || "cliente";
-      document.title = `Recibo de ${payerName}`;
-      try {
-        window.print();
-        try {
-          await saveReceipt(receiptData, data, userId);
-          toast.success("Recibo exportado e salvo!");
-        } catch (e: unknown) {
-          toast.error(`Falha ao salvar recibo: ${e instanceof Error ? e.message : e}`);
-        }
-      } catch {
-        toast.error("Erro ao processar a impressão.");
-      } finally {
-        document.title = originalTitle;
-        setExporting(false);
-      }
+    try {
+      const label = isReceipt
+        ? (data.clientName.trim() || "cliente")
+        : (data.clientName.trim() || "cliente");
+      document.title = isReceipt ? `Recibo de ${label}` : `Orçamento de ${label}`;
+      window.print();
+    } catch {
+      toast.error("Erro ao processar a impressão.");
+    } finally {
+      document.title = originalTitle;
+      setExporting(false);
+    }
+
+    // Ask user whether to save to history
+    const saveAction = isReceipt
+      ? async () => { await saveReceipt(receiptData, data, userId!); }
+      : async () => { await saveQuote(data, userId!); };
+    setPendingSave(() => saveAction);
+    setShowSavePrompt(true);
+  };
+
+  const handleConfirmSave = async () => {
+    setShowSavePrompt(false);
+    if (!pendingSave) return;
+    setSavingToHistory(true);
+    try {
+      await pendingSave();
+      toast.success(activeTab === "receipt" ? "Recibo salvo no histórico!" : "Orçamento salvo no histórico!");
+    } catch (e: unknown) {
+      toast.error(`Falha ao salvar: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setSavingToHistory(false);
+      setPendingSave(null);
     }
   };
 
-  const logout = async () => {
+  const handleDismissSave = () => {
+    setShowSavePrompt(false);
+    setPendingSave(null);
+  };
+
+    const logout = async () => {
     await supabase.auth.signOut();
     navigate({ to: "/login", replace: true });
   };
@@ -353,6 +362,7 @@ function Dashboard() {
               setData={setReceiptData}
               budgetData={data}
               setBudgetData={setData}
+              userId={userId}
             />
           )}
         </aside>
@@ -381,6 +391,48 @@ function Dashboard() {
           </div>
         </section>
       </main>
+
+      {/* ── Save to history prompt ──────────────────────────────────────── */}
+      {showSavePrompt && typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+            <div className="bg-white p-8 rounded-xl shadow-2xl flex flex-col items-center max-w-sm w-full mx-4 animate-in fade-in zoom-in duration-200">
+              <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mb-5">
+                <Save className="h-7 w-7 text-primary" />
+              </div>
+              <h3 className="text-xl font-serif font-medium text-black text-center mb-2">
+                Salvar no histórico?
+              </h3>
+              <p className="text-sm text-neutral-500 text-center mb-7 leading-relaxed">
+                Deseja guardar este{" "}
+                <strong className="text-black">
+                  {activeTab === "receipt" ? "recibo" : "orçamento"}
+                </strong>{" "}
+                para consulta e reabertura futuras?
+              </p>
+              <div className="flex gap-3 w-full">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={handleDismissSave}
+                >
+                  Não, ignorar
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={handleConfirmSave}
+                  disabled={savingToHistory}
+                >
+                  {savingToHistory ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : null}
+                  Sim, salvar
+                </Button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

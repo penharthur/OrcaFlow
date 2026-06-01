@@ -53,6 +53,7 @@ const headerLabel = "text-[11px] uppercase tracking-wider font-semibold text-sla
 export function BudgetForm({ data, setData, background, setBackground, onUpload }: Props) {
   const [aiLoading, setAiLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
+  const [aiFilledFields, setAiFilledFields] = useState<Set<string>>(new Set());
 
   const loadingPhrases = [
     "Analisando o texto bruto...",
@@ -127,16 +128,23 @@ export function BudgetForm({ data, setData, background, setBackground, onUpload 
     }
     setAiLoading(true);
     try {
-      const { items, valor_global, observations } = await structureScope(data.rawScope);
+      const { items, valor_global, observations, paymentTerms, executionTerms } = await structureScope(data.rawScope);
       if (!items.length) {
         toast.warning("A IA não retornou itens. Refine o texto e tente novamente.");
         return;
       }
+      const filledFields = new Set<string>();
+      if ((valor_global ?? 0) > 0) filledFields.add("globalValue");
+      if (paymentTerms)   filledFields.add("paymentTerms");
+      if (executionTerms) filledFields.add("executionTerms");
+      setAiFilledFields(filledFields);
       setData((d) => ({
         ...d,
-        items: items.map((it) => ({ ...newItem(), ...it })),
+        items: items.map((it) => ({ ...newItem(), ...it, aiGenerated: true })),
         globalValue: valor_global ?? 0,
         observations,
+        ...(paymentTerms  ? { paymentTerms }  : {}),
+        ...(executionTerms ? { executionTerms } : {}),
       }));
       const globalMsg = valor_global ? ` • Valor global: R$ ${valor_global.toFixed(2).replace(".", ",")}` : "";
       toast.success(`${items.length} itens estruturados pela IA.${globalMsg}`);
@@ -454,18 +462,42 @@ export function BudgetForm({ data, setData, background, setBackground, onUpload 
           />
         </div>
         <div className="space-y-2">
-          <Label>Prazo de pagamento</Label>
-          <PaymentTermsSelect
-            value={data.paymentTerms}
-            onChange={(v) => setData((d) => ({ ...d, paymentTerms: v }))}
-          />
+          <div className="flex items-center justify-between">
+            <Label>Prazo de pagamento</Label>
+            {aiFilledFields.has("paymentTerms") && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full">
+                <Sparkles className="h-2.5 w-2.5" /> IA
+              </span>
+            )}
+          </div>
+          <div className={aiFilledFields.has("paymentTerms") ? "ring-2 ring-blue-300 ring-offset-1 rounded-lg" : ""}>
+            <PaymentTermsSelect
+              value={data.paymentTerms}
+              onChange={(v) => {
+                setAiFilledFields((s) => { const n = new Set(s); n.delete("paymentTerms"); return n; });
+                setData((d) => ({ ...d, paymentTerms: v }));
+              }}
+            />
+          </div>
         </div>
         <div className="space-y-2">
-          <Label>Prazo de realização</Label>
-          <ExecutionTermsSelect
-            value={data.executionTerms}
-            onChange={(v) => setData((d) => ({ ...d, executionTerms: v }))}
-          />
+          <div className="flex items-center justify-between">
+            <Label>Prazo de realização</Label>
+            {aiFilledFields.has("executionTerms") && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full">
+                <Sparkles className="h-2.5 w-2.5" /> IA
+              </span>
+            )}
+          </div>
+          <div className={aiFilledFields.has("executionTerms") ? "ring-2 ring-blue-300 ring-offset-1 rounded-lg" : ""}>
+            <ExecutionTermsSelect
+              value={data.executionTerms}
+              onChange={(v) => {
+                setAiFilledFields((s) => { const n = new Set(s); n.delete("executionTerms"); return n; });
+                setData((d) => ({ ...d, executionTerms: v }));
+              }}
+            />
+          </div>
         </div>
       </section>
 

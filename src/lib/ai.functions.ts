@@ -1,14 +1,15 @@
-﻿import { GoogleGenerativeAI } from "@google/generative-ai";
+﻿﻿import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export type StructuredItem = {
   description: string;
   quantity: number | null;
+  unit: string;
   unitPrice: number | null;
 };
 
 export async function structureScope(
   scope: string,
-): Promise<{ items: StructuredItem[]; valor_global: number | null; observations: string[] }> {
+): Promise<{ items: StructuredItem[]; valor_global: number | null; observations: string[]; paymentTerms: string | null; executionTerms: string | null }> {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
   if (!apiKey) throw new Error("VITE_GEMINI_API_KEY não configurada.");
 
@@ -16,31 +17,35 @@ export async function structureScope(
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const prompt = `Você é um assistente especialista em orçamentos de serviços gerais e obras no Brasil.
-Analise o texto bruto de escopo abaixo e retorne ESTRITAMENTE um JSON válido (sem marcações markdown, sem \`\`\`json, sem texto extra) com um objeto contendo as chaves "items", "valor_global" e "observacoes".
-
+Analise o texto bruto de escopo abaixo e retorne ESTRITAMENTE um JSON válido (sem marcações markdown, sem \`\`\`json, sem texto extra) com um objeto contendo as chaves "items", "valor_global", "observacoes", "prazo_pagamento" e "prazo_execucao".
 Regras para "items" — lista de serviços/tarefas a executar:
-- "descricao": string — descrição clara e profissional em português.
-- "quantidade": number ou null — identifique a quantidade (m², kg, unidades, etc.). Se usar "ambas", "as duas" ou "par", converta para 2. Se não informado, use null.
-- "valor": number ou null — SEMPRE o valor UNITÁRIO. Se o texto informar valor total para quantidade > 1, DIVIDA. Use ponto como decimal, sem "R". Se for valor global único, use null.
+- "descricao": string — descricao clara e profissional em portugues.
+- "quantidade": number ou null — identifique a quantidade numerica. Se nao informado, null.
+- "unidade": string — unidade de medida quando mencionada (ex: "m2", "m", "kg", "un", "h"). Use "m2" para metros quadrados. String vazia se nao mencionado.
+- "valor": number ou null — SEMPRE o valor UNITARIO. Divida se necessario. Ponto como decimal, sem "R$". Null se valor global unico.
 
 Regra para "valor_global":
-- Se o texto mencionar um valor único para TODOS os serviços juntos (ex: "tudo por 650", " 33.500,00", "R 33.500,00"), extraia esse número em "valor_global" e deixe "valor" de cada item como null.
-- IMPORTANTE: ignore separadores de milhar — "33.500,00" = 33500.00, "1.200,00" = 1200.00.
-- Se os valores forem por item, deixe "valor_global" como null e preencha "valor" em cada item.
-- "valor_global" é number ou null.
+- Se o texto mencionar um valor unico para TODOS os servicos juntos (ex: "tudo por 650", "R$ 33.500,00", "$ 33.500,00"), coloque em "valor_global" e deixe "valor" de cada item como null.
+- Ignore separadores de milhar: "33.500,00" = 33500.00. "valor_global" e number ou null.
 
-Regras para "observacoes" — lista de notas, ressalvas e condições especiais:
-- Extraia textos marcados como "Obs", "Obs:", "Obs 1", "Obs 2", "Observação", etc.
-- Inclua qualquer condição especial, exigência externa, ressalva ou nota que NÃO seja um serviço a executar.
-- Cada observação é uma string. Preserve o texto original (pode corrigir ortografia óbvia), sem truncar.
-- Retorne array vazio [] se não houver observações.
-- NÃO inclua em "observacoes": serviços executáveis, valores monetários, prazos de pagamento.
+Regras para "observacoes":
+- Extraia textos marcados como "Obs", "Obs:", "Obs 1", "Obs 2", "Observacao", etc.
+- Inclua condicoes especiais, exigencias externas, ressalvas que NAO sejam servicos.
+- Array de strings. Vazio [] se nao houver.
 
-O que vai para "items": serviços manuais, mão de obra, materiais aplicados, taxas obrigatórias (ex: "Seguro da obra", "Retirada do entulho").
-O que vai para "observacoes": notas explicativas, condições impostas por terceiros, ressalvas técnicas.
+Regras para "prazo_pagamento":
+- Se o texto mencionar prazo de pagamento, extraia no formato exato abaixo. Null se nao mencionado.
+- Formatos validos: "A combinar" | "X% no inicio, Y% na entrega" | "X dias uteis" | "X dias corridos"
+- Exemplos: "Prazo de pagamento a combinar" -> "A combinar"; "50% entrada 50% entrega" -> "50% no inicio, 50% na entrega"; "30 dias corridos" -> "30 dias corridos"
+
+Regras para "prazo_execucao":
+- Se o texto mencionar prazo de execucao/entrega, extraia no formato exato abaixo. Null se nao mencionado.
+- Formatos validos: "A combinar" | "X dias uteis" | "X dias corridos"
+- Exemplos: "Prazo de entrega 7 dias corridos" -> "7 dias corridos"; "execucao em 15 dias uteis" -> "15 dias uteis"
 
 Texto bruto do escopo:
 ${scope}`
+
   const result = await model.generateContent(prompt);
   const raw = result.response.text().trim();
 
@@ -70,6 +75,7 @@ ${scope}`
           : typeof item.quantity === "number"
             ? item.quantity
             : null,
+      unit: String(item.unidade ?? item.unit ?? "").trim(),
       unitPrice:
         typeof item.valor === "number"
           ? item.valor
@@ -89,7 +95,16 @@ ${scope}`
     : [];
   const observations: string[] = rawObs.map((o) => String(o).trim()).filter(Boolean);
 
-  return { items, valor_global, observations };
+  const p = parsed as Record<string, unknown>;
+  const strOrNull = (k: string) => {
+    const v = p[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+    return null;
+  };
+  const paymentTerms  = strOrNull("prazo_pagamento") ?? strOrNull("paymentTerms");
+  const executionTerms = strOrNull("prazo_execucao") ?? strOrNull("executionTerms");
+
+  return { items, valor_global, observations, paymentTerms, executionTerms };
 }
 
 /** Convert a File to base64 in chunks (avoids stack overflow on large files) */

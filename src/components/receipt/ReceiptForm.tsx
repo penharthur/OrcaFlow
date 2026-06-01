@@ -1,7 +1,11 @@
-import { format } from "date-fns";
+﻿import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon, Copy } from "lucide-react";
+import { CalendarIcon, Copy, FileText, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
+import { createPortal } from "react-dom";
+import { useState } from "react";
+import { getQuotes, type SavedQuote } from "@/lib/quotes";
+import { formatBRL } from "@/lib/budget-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,9 +36,35 @@ type Props = {
   /** Shared with budget: client name + address */
   budgetData: BudgetData;
   setBudgetData: (updater: (d: BudgetData) => BudgetData) => void;
+  userId?: string | null;
 };
 
-export function ReceiptForm({ data, setData, budgetData, setBudgetData }: Props) {
+export function ReceiptForm({ data, setData, budgetData, setBudgetData, userId }: Props) {
+  const [showImport, setShowImport] = useState(false);
+  const [importQuotes, setImportQuotes] = useState<SavedQuote[]>([]);
+  const [importLoading, setImportLoading] = useState(false);
+
+  const openImport = async () => {
+    if (!userId) { toast.error("Faça login para acessar o histórico."); return; }
+    setShowImport(true);
+    setImportLoading(true);
+    try {
+      const qs = await getQuotes(userId);
+      setImportQuotes(qs);
+    } catch {
+      toast.error("Não foi possível carregar os orçamentos.");
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleSelectQuote = (q: SavedQuote) => {
+    const payload = q.payload as BudgetData;
+    setBudgetData(() => payload);
+    setData((d) => ({ ...d, value: q.total_value ?? 0 }));
+    setShowImport(false);
+    toast.success("Dados do orçamento importados!");
+  };
   /** Computed from the shared address — used in "auto" mode */
   const autoDescription = (() => {
     const addr = buildAddress(budgetData, ", ");
@@ -54,6 +84,16 @@ export function ReceiptForm({ data, setData, budgetData, setBudgetData }: Props)
 
   return (
     <div className="space-y-8">
+
+      {/* Import from saved budget */}
+      <button
+        onClick={openImport}
+        className="w-full flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/30 px-4 py-3 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+      >
+        <FileText className="h-4 w-4" />
+        Importar dados de um orçamento salvo
+      </button>
+
       {/* ── Shared fields (same as budget) ────────────────────────────── */}
       <section className="space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -336,6 +376,58 @@ export function ReceiptForm({ data, setData, budgetData, setBudgetData }: Props)
           />
         </div>
       </section>
+
+      {/* Import from budget modal */}
+      {showImport && typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm">
+            <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-xl shadow-2xl flex flex-col max-h-[80vh] animate-in slide-in-from-bottom-4 sm:fade-in sm:zoom-in duration-200">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b">
+                <div>
+                  <h3 className="font-serif text-lg font-medium">Selecionar orçamento</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Clique para importar os dados</p>
+                </div>
+                <button onClick={() => setShowImport(false)} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* List */}
+              <div className="overflow-y-auto flex-1 p-3 space-y-2">
+                {importLoading && (
+                  <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span className="text-sm">Carregando...</span>
+                  </div>
+                )}
+                {!importLoading && importQuotes.length === 0 && (
+                  <p className="text-center text-sm text-muted-foreground py-12">
+                    Nenhum orçamento salvo ainda.
+                  </p>
+                )}
+                {importQuotes.map((q) => {
+                  const name = q.clients?.name || (q.payload as { clientName?: string })?.clientName || "Cliente";
+                  const val  = q.total_value != null && q.total_value > 0 ? formatBRL(q.total_value) : null;
+                  const date = new Date(q.created_at).toLocaleDateString("pt-BR");
+                  return (
+                    <button
+                      key={q.id}
+                      onClick={() => handleSelectQuote(q)}
+                      className="w-full text-left rounded-lg border bg-card px-4 py-3 hover:border-primary hover:bg-accent transition-colors"
+                    >
+                      <p className="font-medium text-sm">{name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {date}{val ? ` · ${val}` : ""}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

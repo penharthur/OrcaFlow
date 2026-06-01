@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 
 export type BudgetItem = {
   id: string;
   description: string;
   quantity: number | null;
+  unit: string;          // unidade de medida (m², un, m, kg, h...) — vazio = sem unidade
   unitPrice: number | null;
+  aiGenerated?: boolean; // true enquanto o campo nao foi editado manualmente apos IA
 };
 
 export type BudgetData = {
@@ -44,7 +46,9 @@ export const newItem = (): BudgetItem => ({
   id: uuidv4(),
   description: "",
   quantity: null,
+  unit: "",
   unitPrice: null,
+  aiGenerated: false,
 });
 
 export const defaultBudget = (): BudgetData => ({
